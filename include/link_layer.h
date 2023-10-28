@@ -36,12 +36,20 @@ typedef struct
 #define FALSE 0
 #define TRUE 1
 
+#define SUPFRAME_SIZE 5 //
+
+#define FLAG   0x7E
+#define A_SET  0x03
+#define C_SET  0x03
+#define A_UA   0x01
+#define C_UA   0x07
+
 // Open a connection using the "port" parameters defined in struct linkLayer.
 // Return "1" on success or "-1" on error.
 int llopen(LinkLayer connectionParameters);
 
 int llopenTx(int fd, &buf);
-int llopenRx(int fd, &buf)
+int llopenRx(int fd, &buf);
 
 // Send data in buf with size bufSize.
 // Return number of chars written, or "-1" on error.
