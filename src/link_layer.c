@@ -24,18 +24,16 @@ int llopen(LinkLayer connectionParameters)
 }
 
 int llopenTx(int fd, &buf){
-    unsigned char
-}
 
-int llopenRx(int fd, &buf){
+    unsigned char SUPFRAME[SUPFRAME_SIZE] = {FLAG, A_SET, C_SET, A_SET^C_SET, FLAG}
 
-    int bytes = write(fd, buf, BUF_SIZE);
+    int bytes = write(fd, SUPFRAME, SUPFRAME_SIZE);
     printf("%d bytes written\n", bytes);
 
     // Wait until all bytes have been written to the serial port
     sleep(1);
 
-    bytes = read(fd, buf, BUF_SIZE);
+    bytes = read(fd, SUPFRAME, 1);
 
     int state = 0;
     int a_ua = 0;
@@ -43,65 +41,134 @@ int llopenRx(int fd, &buf){
 
     switch (state){
     
-	case 0 :{
-		if(buf[0]!=0x7E){
-			state=0;
-			break;
-		}
-        state = 1;
-    }
-	case 1: {
-		if(buf[0]!=0x03){
-			state=0;
-			break;
-		}
-		else if(buf[1]==0x7E){
-			state=1;
-			break;
-		}
-        state=2;
-        a_ua = buf[0];
-    }
-	case 2: {
-		if(buf[0]!=0x03){
-			state = 0;
-			break;
-		}
-		else if(buf[0]==0x7E){
-			state=1;
-			break;
-		}
-        state=3;
-        c_ua = buf[0];
-    }   
-	case 3: {
-		if(buf[0]!=a_ua^c_ua){
-			state=0;
-			break;
-		}
-		else if(buf[0]==0x7E){
-			state=1;
-			break;
-		}
-        state = 4;
-    }   
-	case 4:{
-		if(buf[0]!=0x7E){
-			state=0;
-			break;
-		}
-        state = 5;
-    }
-	case 5:{
-		state = 0;
-		break;
+        case 0 :{
+            if(buf[0]!=FLAG){
+                state=0;
+                break;
+            }
+            state = 1;
+        }
+        case 1: {
+            if(buf[0]!=A_UA){
+                state=0;
+                break;
+            }
+            else if(buf[1]==FLAG){
+                state=1;
+                break;
+            }
+            state=2;
+            a_ua = buf[0];
+        }
+        case 2: {
+            if(buf[0]!=C_UA){
+                state = 0;
+                break;
+            }
+            else if(buf[0]==FLAG){
+                state=1;
+                break;
+            }
+            state=3;
+            c_ua = buf[0];
+        }   
+        case 3: {
+            if(buf[0]!=a_ua^c_ua){
+                state=0;
+                break;
+            }
+            else if(buf[0]==FLAG){
+                state=1;
+                break;
+            }
+            state = 4;
+        }   
+        case 4:{
+            if(buf[0]!=FLAG){
+                state=0;
+                break;
+            }
+            state = 5;
+        }
+        case 5:{
+            state = 0;
+            break;
 
-        printf(":%s:%d\n", buf, bytes);
-    }
+            printf(":%s:%d\n", buf, bytes);
+        }
     }        
 
+}
 
+int llopenRx(int fd, &buf){
 
+    int bytes = read(fd, buf, 1);
+
+    int state=0; //1-FLAG_RCV, 2-A_RCV, 3-C_RCV, 4-BCC_OK, 5-STOP
+
+    switch (state){
+            case 0 :{
+                if(buf[0]!=FLAG){
+                    state=0;
+                    break;
+                }
+                state = 1;
+            }
+            case 1: {
+                if(buf[0]!=A_SET){
+                    state=0;
+                    break;
+                }
+                else if(buf[0]==FLAG){
+                    state=1;
+                    break;
+                }
+                state = 2;
+                a_set = buf[0];
+            }
+            case 2: {
+                if(buf[0]!=C_SET){
+                    state = 0;
+                    break;
+                }
+                else if(buf[0]==FLAG){
+                    state=1;
+                    break;
+                }
+                state = 3;
+                c_set = buf[0];
+            }   
+            case 3: {
+                if(buf[0]!=a_set^c_set){
+                    state=0;
+                    break;
+                }
+                else if(buf[0]==FLAG){
+                    state=1;
+                    break;
+                }
+                state = 4;
+            }   
+            case 4:{
+                if(buf[0]!=FLAG){
+                    state=0;
+                    break;
+                }
+                state = 5;
+            }
+            case 5:{
+                state = 0;
+                break;
+
+                printf(":%s:%d\n", buf, bytes);
+            }        
+
+        }
+
+    unsigned char SUPFRAME[SUPFRAME_SIZE] = {FLAG, A_UA, C_UA, A_UA^C_UA, FLAG}
+
+    int bytes = write(fd, SUPFRAME, SUPFRAME_SIZE);
+    printf("%d bytes written\n", bytes);
 }
 
 
