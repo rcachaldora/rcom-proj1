@@ -11,10 +11,9 @@
 int llopen(LinkLayer connectionParameters)
 {
     int fd = openPort(connectionParameters.serialPort);
-    unsigned char buf[BUF_SIZE] = {0};
     
     if(connectionParameters.role == LlTx)
-        llopenTx(fd, &buf);
+        llopenTx(fd);
     else if(connectionParameters.role == LlRx)
         llopenRx(fd);
     else
@@ -23,134 +22,141 @@ int llopen(LinkLayer connectionParameters)
     return 1;
 }
 
-int llopenTx(int fd, &buf){
+int llopenTx(int fd, unsigned char &buf){
 
-    unsigned char SUPFRAME[SUPFRAME_SIZE] = {FLAG, A_SET, C_SET, A_SET^C_SET, FLAG}
+    unsigned char SUPFRAME[SUPFRAME_SIZE] = {FLAG, A_SET, C_SET, A_SET^C_SET, FLAG} // the supervision frame
 
-    int bytes = write(fd, SUPFRAME, SUPFRAME_SIZE);
-    printf("%d bytes written\n", bytes);
+    int bytes = write(fd, SUPFRAME, SUPFRAME_SIZE); // write the frame
+    //printf("%d bytes written\n", bytes);
 
-    // Wait until all bytes have been written to the serial port
-    sleep(1);
+    (void) signal(SIGALRM, alarmHandler); // set the alarm to keep track of retransmissions and timeouts
+ 
+    int retransmissionsCount = connectionParameters.nRetransmissions; //creating a counter for retransmissions
 
-    bytes = read(fd, SUPFRAME, 1);
+    while(retransmissionsCount > 0 && state != -1 ){ 
 
-    int state = 0;
-    int a_ua = 0;
-    int c_ua = 0;
+        bytes = read(fd, SUPFRAME, 1);  //read the frame sent by receiver 
 
-    switch (state){
-    
-        case 0 :{
-            if(buf[0]!=FLAG){
-                state=0;
-                break;
-            }
-            state = 1;
-        }
-        case 1: {
-            if(buf[0]!=A_UA){
-                state=0;
-                break;
-            }
-            else if(buf[1]==FLAG){
-                state=1;
-                break;
-            }
-            state=2;
-            a_ua = buf[0];
-        }
-        case 2: {
-            if(buf[0]!=C_UA){
-                state = 0;
-                break;
-            }
-            else if(buf[0]==FLAG){
-                state=1;
-                break;
-            }
-            state=3;
-            c_ua = buf[0];
-        }   
-        case 3: {
-            if(buf[0]!=a_ua^c_ua){
-                state=0;
-                break;
-            }
-            else if(buf[0]==FLAG){
-                state=1;
-                break;
-            }
-            state = 4;
-        }   
-        case 4:{
-            if(buf[0]!=FLAG){
-                state=0;
-                break;
-            }
-            state = 5;
-        }
-        case 5:{
-            state = 0;
-            break;
+        //we should check if fd is not equal to 0
 
-            printf(":%s:%d\n", buf, bytes);
-        }
-    }        
+        int state = 0; //setting the starting state
+        int a_ua_check = 0; //to store the a_ua and check the bcc1
+        int c_ua_check = 0; //to store the c_ua and check the bcc1
 
-}
-
-int llopenRx(int fd, &buf){
-
-    int bytes = read(fd, buf, 1);
-
-    int state=0; //1-FLAG_RCV, 2-A_RCV, 3-C_RCV, 4-BCC_OK, 5-STOP
-
-    switch (state){
+        switch (state){
+        
             case 0 :{
-                if(buf[0]!=FLAG){
+                if(SUPFRAME[0]!=FLAG){  //flag 
                     state=0;
                     break;
                 }
                 state = 1;
             }
             case 1: {
-                if(buf[0]!=A_SET){
+                if(SUPFRAME[0]!=A_UA){ //a_ua
                     state=0;
                     break;
                 }
-                else if(buf[0]==FLAG){
+                else if(SUPFRAME[0]==FLAG){//flag
                     state=1;
                     break;
                 }
-                state = 2;
-                a_set = buf[0];
+                state=2;
+                a_ua_check = SUPFRAME[0];
             }
             case 2: {
-                if(buf[0]!=C_SET){
+                if(SUPFRAME[0]!=C_UA){//c_ua
                     state = 0;
                     break;
                 }
-                else if(buf[0]==FLAG){
+                else if(SUPFRAME[0]==FLAG){//flag
                     state=1;
                     break;
                 }
-                state = 3;
-                c_set = buf[0];
+                state=3;
+                c_ua_check = SUPFRAME[0];
             }   
             case 3: {
-                if(buf[0]!=a_set^c_set){
+                if(SUPFRAME[0]!=a_ua_check^c_ua_check){ //bcc1
                     state=0;
                     break;
                 }
-                else if(buf[0]==FLAG){
+                else if(SUPFRAME[0]==FLAG){ //flag
                     state=1;
                     break;
                 }
                 state = 4;
             }   
             case 4:{
-                if(buf[0]!=FLAG){
+                if(SUPFRAME[0]!=FLAG){ //flag again
+                    state=0;
+                    break;
+                }
+                state = 5;
+            }
+            case 5:{   //finished
+                state = 0;
+                break;
+                //printf(":%s:%d\n", buf, bytes);
+            }
+        }
+
+        nRetransmissions--;
+    }        
+
+}
+
+int llopenRx(int fd, unsigned char &buf){
+
+    int bytes = read(fd, SUPFRAME, 1); //aqui é bytes?
+
+    int state=0; //1-FLAG_RCV, 2-A_RCV, 3-C_RCV, 4-BCC_OK, 5-STOP
+
+    switch (state){
+            case 0 :{
+                if(SUPFRAME[0]!=FLAG){
+                    state=0;
+                    break;
+                }
+                state = 1;
+            }
+            case 1: {
+                if(SUPFRAME[0]!=A_SET){
+                    state=0;
+                    break;
+                }
+                else if(SUPFRAME[0]==FLAG){
+                    state=1;
+                    break;
+                }
+                state = 2;
+                a_set = SUPFRAME[0];
+            }
+            case 2: {
+                if(SUPFRAME[0]!=C_SET){
+                    state = 0;
+                    break;
+                }
+                else if(SUPFRAME[0]==FLAG){
+                    state=1;
+                    break;
+                }
+                state = 3;
+                c_set = SUPFRAME[0];
+            }   
+            case 3: {
+                if(SUPFRAME[0]!=a_set^c_set){
+                    state=0;
+                    break;
+                }
+                else if(SUPFRAME[0]==FLAG){
+                    state=1;
+                    break;
+                }
+                state = 4;
+            }   
+            case 4:{
+                if(SUPFRAME[0]!=FLAG){
                     state=0;
                     break;
                 }
@@ -160,12 +166,12 @@ int llopenRx(int fd, &buf){
                 state = 0;
                 break;
 
-                printf(":%s:%d\n", buf, bytes);
+                //printf(":%s:%d\n", buf, bytes);
             }        
 
         }
 
-    unsigned char SUPFRAME[SUPFRAME_SIZE] = {FLAG, A_UA, C_UA, A_UA^C_UA, FLAG}
+    unsigned char SUPFRAME[SUPFRAME_SIZE] = {FLAG, A_UA, C_UA, A_UA^C_UA, FLAG} //e se passarmos o supframe a uma variavel global?
 
     int bytes = write(fd, SUPFRAME, SUPFRAME_SIZE);
     printf("%d bytes written\n", bytes);
