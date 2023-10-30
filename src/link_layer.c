@@ -13,16 +13,16 @@ int llopen(LinkLayer connectionParameters)
     int fd = openPort(connectionParameters.serialPort);
     
     if(connectionParameters.role == LlTx)
-        llopenTx(fd);
+        return llopenTx(fd, connectionParameters.nRetransmissions);
     else if(connectionParameters.role == LlRx)
-        llopenRx(fd);
+        return llopenRx(fd);
     else
         return -1;
 
-    return 1;
+    return fd;
 }
 
-int llopenTx(int fd, unsigned char &buf){
+int llopenTx(int fd, int retransmissionsCount, int timeout){
 
     unsigned char SUPFRAME[SUPFRAME_SIZE] = {FLAG, A_SET, C_SET, A_SET^C_SET, FLAG} // the supervision frame
 
@@ -30,9 +30,8 @@ int llopenTx(int fd, unsigned char &buf){
     //printf("%d bytes written\n", bytes);
 
     (void) signal(SIGALRM, alarmHandler); // set the alarm to keep track of retransmissions and timeouts
+    alarm(timeout);
  
-    int retransmissionsCount = connectionParameters.nRetransmissions; //creating a counter for retransmissions
-
     while(retransmissionsCount > 0 && state != -1 ){ 
 
         bytes = read(fd, SUPFRAME, 1);  //read the frame sent by receiver 
@@ -101,12 +100,12 @@ int llopenTx(int fd, unsigned char &buf){
             }
         }
 
-        nRetransmissions--;
+        retransmissionsCount--;
     }        
 
 }
 
-int llopenRx(int fd, unsigned char &buf){
+int llopenRx(int fd){
 
     int bytes = read(fd, SUPFRAME, 1); //aqui é bytes?
 
@@ -174,7 +173,7 @@ int llopenRx(int fd, unsigned char &buf){
     unsigned char SUPFRAME[SUPFRAME_SIZE] = {FLAG, A_UA, C_UA, A_UA^C_UA, FLAG} //e se passarmos o supframe a uma variavel global?
 
     int bytes = write(fd, SUPFRAME, SUPFRAME_SIZE);
-    printf("%d bytes written\n", bytes);
+    //printf("%d bytes written\n", bytes);
 }
 
 
