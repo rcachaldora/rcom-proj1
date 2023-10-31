@@ -48,8 +48,8 @@ typedef struct
 // Return "1" on success or "-1" on error.
 int llopen(LinkLayer connectionParameters);
 
-int llopenTx(int fd, unsigned char &buf);
-int llopenRx(int fd, unsigned char &buf);
+int llopenTx(int fd, int retransmissionsCount, int timeout);
+int llopenRx(int fd);
 
 // Send data in buf with size bufSize.
 // Return number of chars written, or "-1" on error.

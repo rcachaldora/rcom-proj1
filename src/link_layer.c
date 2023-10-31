@@ -1,6 +1,6 @@
 // Link layer protocol implementation
 
-#include "link_layer.h"
+#include "../include/link_layer.h"
 
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
@@ -31,6 +31,7 @@ int llopenTx(int fd, int retransmissionsCount, int timeout){
 
     (void) signal(SIGALRM, alarmHandler); // set the alarm to keep track of retransmissions and timeouts
     alarm(timeout);
+    alarmTriggered = FALSE;
  
     while(retransmissionsCount > 0 && state != -1 ){ 
 
@@ -229,12 +230,18 @@ int openPort(const char* serialPort){
 
     return fd;
 }
+
+void alarmHandler(int signal) {
+    alarmTriggered = TRUE;
+    alarmCount++;
+}
+
 ////////////////////////////////////////////////
 // LLWRITE
 ////////////////////////////////////////////////
 int llwrite(const unsigned char *buf, int bufSize)
 {
-    // TODO
+    
 
     return 0;
 }
