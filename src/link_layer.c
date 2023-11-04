@@ -241,7 +241,44 @@ void alarmHandler(int signal) {
 ////////////////////////////////////////////////
 int llwrite(const unsigned char *buf, int bufSize)
 {
-    
+    unsigned char header[4] = {FLAG, A_SET, (linkLayer.sequenceNumber == 0? C_I0 : C_I1), (header[1]^header[2])};
+    unsigned char *dataBuf = (unsigned char*) malloc(bufSize);
+
+    unsigned char BCC2 = buf[0];
+    unsigned char *trailer = (unsigned char*)malloc(2); 
+
+    //bcc2
+    for (int i = 1; i<bufSize; i++){
+        BCC2 = BCC2 ^ buffer[i];
+    }
+
+    //byte stuffing bcc2
+    if(BCC2 == 0x7E || BCC2 == 0x7D){
+        trailer = (unsigned char*)realloc(trailer, 3);
+        trailer[0] = 0x7D;
+        trailer[1] = BCC2 ^0x20;
+        trailer[2] = FLAG;
+    }
+    else{
+        trailer[0] = BCC2;
+        trailer[1] = FLAG;
+    }
+
+    //byte stuffin data payload
+    int currentSize = bufSize;
+    for (int i = 1; i<bufSize; i++){
+        if(buffer[i] == 0x7E || buffer[i] == 0x7D){
+            currentSize++; //when we byte stuff the data we need to allocate one more byte
+            trailer = (unsigned char*)realloc(trailer, currentSize);
+            trailer[0] = 0x7D;
+            trailer[1] = BCC2 ^0x20;
+            trailer[2] = FLAG;
+        }
+        else{
+            trailer[0] = BCC2;
+            trailer[1] = FLAG;
+        }        
+    }
 
     return 0;
 }
