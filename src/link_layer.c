@@ -46,6 +46,7 @@ int llopenTx(int fd, &buf){
                 state=0;
                 break;
             }
+            printf("0x%02X\n",buf[0]);
             state = 1;
         }
         case 1: {
@@ -57,6 +58,7 @@ int llopenTx(int fd, &buf){
                 state=1;
                 break;
             }
+            printf("0x%02X\n",buf[0]);
             state=2;
             a_ua = buf[0];
         }
@@ -69,6 +71,7 @@ int llopenTx(int fd, &buf){
                 state=1;
                 break;
             }
+            printf("0x%02X\n",buf[0]);
             state=3;
             c_ua = buf[0];
         }   
@@ -81,6 +84,7 @@ int llopenTx(int fd, &buf){
                 state=1;
                 break;
             }
+            printf("0x%02X\n",buf[0]);
             state = 4;
         }   
         case 4:{
@@ -88,10 +92,12 @@ int llopenTx(int fd, &buf){
                 state=0;
                 break;
             }
+            printf("0x%02X\n",buf[0]);
             state = 5;
         }
         case 5:{
             state = 0;
+            printf("0x%02X\n",buf[0]);
             break;
 
             printf(":%s:%d\n", buf, bytes);
