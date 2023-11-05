@@ -1,6 +1,6 @@
 // Link layer protocol implementation
 
-#include "../include/link_layer.h"
+#include "link_layer.h"
 
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
@@ -13,21 +13,21 @@ int llopen(LinkLayer connectionParameters)
     int fd = openPort(connectionParameters.serialPort);
     
     if(connectionParameters.role == LlTx)
-        return llopenTx(fd, connectionParameters.nRetransmissions);
+        llopenTx(fd);
     else if(connectionParameters.role == LlRx)
-        return llopenRx(fd);
+        llopenRx(fd);
     else
         return -1;
 
-    return fd;
+    return 1;
 }
 
-int llopenTx(int fd, int retransmissionsCount, int timeout){
+int llopenTx(int fd){
 
-    unsigned char SUPFRAME[SUPFRAME_SIZE] = {FLAG, A_SET, C_SET, A_SET^C_SET, FLAG} // the supervision frame
+    unsigned char SUPFRAME[SUPFRAME_SIZE] = {FLAG, A_SET, C_SET, A_SET^C_SET, FLAG};
 
-    int bytes = write(fd, SUPFRAME, SUPFRAME_SIZE); // write the frame
-    //printf("%d bytes written\n", bytes);
+    int bytes = write(fd, SUPFRAME, SUPFRAME_SIZE);
+    printf("%d bytes written\n", bytes);
 
     (void) signal(SIGALRM, alarmHandler); // set the alarm to keep track of retransmissions and timeouts
     alarm(timeout);
@@ -43,75 +43,87 @@ int llopenTx(int fd, int retransmissionsCount, int timeout){
         int a_ua_check = 0; //to store the a_ua and check the bcc1
         int c_ua_check = 0; //to store the c_ua and check the bcc1
 
+
+        printf("fds");
         switch (state){
-        
+
             case 0 :{
-                if(SUPFRAME[0]!=FLAG){  //flag 
+                if(SUPFRAME[0]!=FLAG){
                     state=0;
                     break;
                 }
+                printf("0x%02X\n",SUPFRAME[0]);
                 state = 1;
             }
             case 1: {
-                if(SUPFRAME[0]!=A_UA){ //a_ua
+                if(SUPFRAME[0]!=A_UA){
                     state=0;
                     break;
                 }
-                else if(SUPFRAME[0]==FLAG){//flag
+                else if(SUPFRAME[1]==FLAG){
                     state=1;
                     break;
                 }
+                printf("0x%02X\n",SUPFRAME[0]);
                 state=2;
-                a_ua_check = SUPFRAME[0];
+                a_ua = SUPFRAME[0];
             }
             case 2: {
-                if(SUPFRAME[0]!=C_UA){//c_ua
+                if(SUPFRAME[0]!=C_UA){
                     state = 0;
                     break;
                 }
-                else if(SUPFRAME[0]==FLAG){//flag
+                else if(SUPFRAME[0]==FLAG){
                     state=1;
                     break;
                 }
+                printf("0x%02X\n",SUPFRAME[0]);
                 state=3;
-                c_ua_check = SUPFRAME[0];
+                c_ua = SUPFRAME[0];
             }   
             case 3: {
-                if(SUPFRAME[0]!=a_ua_check^c_ua_check){ //bcc1
+                if(SUPFRAME[0]!=(a_ua^c_ua)){
                     state=0;
                     break;
                 }
-                else if(SUPFRAME[0]==FLAG){ //flag
+                else if(SUPFRAME[0]==FLAG){
                     state=1;
                     break;
                 }
+                printf("0x%02X\n",SUPFRAME[0]);
                 state = 4;
             }   
             case 4:{
-                if(SUPFRAME[0]!=FLAG){ //flag again
+                if(SUPFRAME[0]!=FLAG){
                     state=0;
                     break;
                 }
+                printf("0x%02X\n",SUPFRAME[0]);
                 state = 5;
             }
-            case 5:{   //finished
+            case 5:{
                 state = 0;
+                printf("0x%02X\n",SUPFRAME[0]);
                 break;
-                //printf(":%s:%d\n", buf, bytes);
             }
         }
-
-        retransmissionsCount--;
+      retransmissionsCount--;
     }
-        
+    return fd;
 
 }
 
 int llopenRx(int fd){
 
-    int bytes = read(fd, SUPFRAME, 1); //aqui é bytes?
+
+    unsigned char SUPFRAME[SUPFRAME_SIZE] = {0};
+
+    int bytes = read(fd, SUPFRAME, 1);
 
     int state=0; //1-FLAG_RCV, 2-A_RCV, 3-C_RCV, 4-BCC_OK, 5-STOP
+
+    int a_set = 0;
+    int c_set = 0;
 
     switch (state){
             case 0 :{
@@ -119,6 +131,7 @@ int llopenRx(int fd){
                     state=0;
                     break;
                 }
+                printf("0x%02X\n",SUPFRAME[0]);
                 state = 1;
             }
             case 1: {
@@ -130,6 +143,7 @@ int llopenRx(int fd){
                     state=1;
                     break;
                 }
+                printf("0x%02X\n",SUPFRAME[0]);
                 state = 2;
                 a_set = SUPFRAME[0];
             }
@@ -142,11 +156,12 @@ int llopenRx(int fd){
                     state=1;
                     break;
                 }
+                printf("0x%02X\n",SUPFRAME[0]);
                 state = 3;
                 c_set = SUPFRAME[0];
             }   
             case 3: {
-                if(SUPFRAME[0]!=a_set^c_set){
+                if(SUPFRAME[0]!=(a_set^c_set)){
                     state=0;
                     break;
                 }
@@ -154,6 +169,7 @@ int llopenRx(int fd){
                     state=1;
                     break;
                 }
+                printf("0x%02X\n",SUPFRAME[0]);
                 state = 4;
             }   
             case 4:{
@@ -161,21 +177,23 @@ int llopenRx(int fd){
                     state=0;
                     break;
                 }
+                printf("0x%02X\n",SUPFRAME[0]);
                 state = 5;
             }
             case 5:{
                 state = 0;
                 break;
-
-                //printf(":%s:%d\n", buf, bytes);
             }        
 
-        }
+    }
 
-    unsigned char SUPFRAME[SUPFRAME_SIZE] = {FLAG, A_UA, C_UA, A_UA^C_UA, FLAG} //e se passarmos o supframe a uma variavel global?
+    unsigned char TxSUPFRAME[SUPFRAME_SIZE] = {FLAG, A_UA, C_UA, A_UA^C_UA, FLAG};
 
-    int bytes = write(fd, SUPFRAME, SUPFRAME_SIZE);
-    //printf("%d bytes written\n", bytes);
+    bytes = write(fd, TxSUPFRAME, SUPFRAME_SIZE);
+
+    printf("%d bytes written\n", bytes);
+
+    return fd;
 }
 
 
@@ -323,3 +341,4 @@ int llclose(int showStatistics)
 
     return 1;
 }
+
