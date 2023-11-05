@@ -110,6 +110,7 @@ int llopenTx(int fd){
       retransmissionsCount--;
     }
     return fd;
+
 }
 
 int llopenRx(int fd){
@@ -271,31 +272,51 @@ int llwrite(const unsigned char *buf, int bufSize)
     }
 
     //byte stuffing bcc2
+    trailerSize = 1;
     if(BCC2 == 0x7E || BCC2 == 0x7D){
         trailer = (unsigned char*)realloc(trailer, 3);
         trailer[0] = 0x7D;
         trailer[1] = BCC2 ^0x20;
         trailer[2] = FLAG;
+        trailerSize++;
     }
     else{
         trailer[0] = BCC2;
         trailer[1] = FLAG;
     }
 
-    //byte stuffin data payload
+    //byte stuffing data payload
     int currentSize = bufSize;
-    for (int i = 1; i<bufSize; i++){
+    for (int i = 0, k = 0; i<bufSize; i++,k++){
         if(buffer[i] == 0x7E || buffer[i] == 0x7D){
             currentSize++; //when we byte stuff the data we need to allocate one more byte
-            trailer = (unsigned char*)realloc(trailer, currentSize);
-            trailer[0] = 0x7D;
-            trailer[1] = BCC2 ^0x20;
-            trailer[2] = FLAG;
+            dataBuf = (unsigned char*)realloc(trailer, currentSize);
+            dataBuf[k] = 0x7D;
+            dataBuf[k+1] = buffer[i] ^0x20;
+            k++;
         }
         else{
-            trailer[0] = BCC2;
-            trailer[1] = FLAG;
+            dataBuf[k] = buffer[i];
         }        
+    }
+
+    int infoframeSize = currentSize + 4 + trailerSize;
+    unsigned char infoframe[infoframeSize];
+
+    int j = 0;
+    //header
+    for[int i=0, i<4; k++,j++]{
+        infoframe[j] = header[i];
+    }
+
+    //data
+    for[int k=0, k<currentSize; k++,j++]{
+        infoframe[j] = dataBuf[k];
+    }
+
+    //trailer
+    for[int l=0, l<trailerSize; l++,j++]{
+        infoframe[j] = trailer[l];
     }
 
     return 0;
