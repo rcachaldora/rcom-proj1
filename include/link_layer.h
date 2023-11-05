@@ -28,8 +28,6 @@ typedef struct
     int timeout;
 } LinkLayer;
 
-#define BAUDRATE 38400
-
 // SIZE of maximum acceptable payload.
 // Maximum number of bytes that application layer should send to link layer
 #define MAX_PAYLOAD_SIZE 1000
@@ -50,10 +48,9 @@ typedef struct
 // Return "1" on success or "-1" on error.
 int llopen(LinkLayer connectionParameters);
 
-int llopenTx(int fd);
+int llopenTx(int fd, int retransmissionsCount, int timeout);
 int llopenRx(int fd);
 
-int openPort(const char* serialPort);
 // Send data in buf with size bufSize.
 // Return number of chars written, or "-1" on error.
 int llwrite(const unsigned char *buf, int bufSize);

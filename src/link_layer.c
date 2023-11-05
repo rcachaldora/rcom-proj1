@@ -29,78 +29,86 @@ int llopenTx(int fd){
     int bytes = write(fd, SUPFRAME, SUPFRAME_SIZE);
     printf("%d bytes written\n", bytes);
 
-    // Wait until all bytes have been written to the serial port
-    sleep(1);
+    (void) signal(SIGALRM, alarmHandler); // set the alarm to keep track of retransmissions and timeouts
+    alarm(timeout);
+    alarmTriggered = FALSE;
+ 
+    while(retransmissionsCount > 0 && state != -1 ){ 
 
-    bytes = read(fd, SUPFRAME, 1);
+        bytes = read(fd, SUPFRAME, 1);  //read the frame sent by receiver 
 
-    int state = 0;
-    int a_ua = 0;
-    int c_ua = 0;
+        //we should check if fd is not equal to 0
 
-    printf("fds");
-    switch (state){
-    
-        case 0 :{
-            if(SUPFRAME[0]!=FLAG){
-                state=0;
-                break;
+        int state = 0; //setting the starting state
+        int a_ua_check = 0; //to store the a_ua and check the bcc1
+        int c_ua_check = 0; //to store the c_ua and check the bcc1
+
+
+        printf("fds");
+        switch (state){
+
+            case 0 :{
+                if(SUPFRAME[0]!=FLAG){
+                    state=0;
+                    break;
+                }
+                printf("0x%02X\n",SUPFRAME[0]);
+                state = 1;
             }
-            printf("0x%02X\n",SUPFRAME[0]);
-            state = 1;
-        }
-        case 1: {
-            if(SUPFRAME[0]!=A_UA){
-                state=0;
-                break;
+            case 1: {
+                if(SUPFRAME[0]!=A_UA){
+                    state=0;
+                    break;
+                }
+                else if(SUPFRAME[1]==FLAG){
+                    state=1;
+                    break;
+                }
+                printf("0x%02X\n",SUPFRAME[0]);
+                state=2;
+                a_ua = SUPFRAME[0];
             }
-            else if(SUPFRAME[1]==FLAG){
-                state=1;
-                break;
+            case 2: {
+                if(SUPFRAME[0]!=C_UA){
+                    state = 0;
+                    break;
+                }
+                else if(SUPFRAME[0]==FLAG){
+                    state=1;
+                    break;
+                }
+                printf("0x%02X\n",SUPFRAME[0]);
+                state=3;
+                c_ua = SUPFRAME[0];
+            }   
+            case 3: {
+                if(SUPFRAME[0]!=(a_ua^c_ua)){
+                    state=0;
+                    break;
+                }
+                else if(SUPFRAME[0]==FLAG){
+                    state=1;
+                    break;
+                }
+                printf("0x%02X\n",SUPFRAME[0]);
+                state = 4;
+            }   
+            case 4:{
+                if(SUPFRAME[0]!=FLAG){
+                    state=0;
+                    break;
+                }
+                printf("0x%02X\n",SUPFRAME[0]);
+                state = 5;
             }
-            printf("0x%02X\n",SUPFRAME[0]);
-            state=2;
-            a_ua = SUPFRAME[0];
-        }
-        case 2: {
-            if(SUPFRAME[0]!=C_UA){
+            case 5:{
                 state = 0;
+                printf("0x%02X\n",SUPFRAME[0]);
                 break;
             }
-            else if(SUPFRAME[0]==FLAG){
-                state=1;
-                break;
-            }
-            printf("0x%02X\n",SUPFRAME[0]);
-            state=3;
-            c_ua = SUPFRAME[0];
-        }   
-        case 3: {
-            if(SUPFRAME[0]!=(a_ua^c_ua)){
-                state=0;
-                break;
-            }
-            else if(SUPFRAME[0]==FLAG){
-                state=1;
-                break;
-            }
-            printf("0x%02X\n",SUPFRAME[0]);
-            state = 4;
-        }   
-        case 4:{
-            if(SUPFRAME[0]!=FLAG){
-                state=0;
-                break;
-            }
-            printf("0x%02X\n",SUPFRAME[0]);
-            state = 5;
         }
-        case 5:{
-            state = 0;
-            printf("0x%02X\n",SUPFRAME[0]);
-            break;
-        }
-    }        
+      retransmissionsCount--;
+    }
     return fd;
 }
 
@@ -240,12 +248,55 @@ int openPort(const char* serialPort){
 
     return fd;
 }
+
+void alarmHandler(int signal) {
+    alarmTriggered = TRUE;
+    alarmCount++;
+}
+
 ////////////////////////////////////////////////
 // LLWRITE
 ////////////////////////////////////////////////
 int llwrite(const unsigned char *buf, int bufSize)
 {
-    // TODO
+    unsigned char header[4] = {FLAG, A_SET, (linkLayer.sequenceNumber == 0? C_I0 : C_I1), (header[1]^header[2])};
+    unsigned char *dataBuf = (unsigned char*) malloc(bufSize);
+
+    unsigned char BCC2 = buf[0];
+    unsigned char *trailer = (unsigned char*)malloc(2); 
+
+    //bcc2
+    for (int i = 1; i<bufSize; i++){
+        BCC2 = BCC2 ^ buffer[i];
+    }
+
+    //byte stuffing bcc2
+    if(BCC2 == 0x7E || BCC2 == 0x7D){
+        trailer = (unsigned char*)realloc(trailer, 3);
+        trailer[0] = 0x7D;
+        trailer[1] = BCC2 ^0x20;
+        trailer[2] = FLAG;
+    }
+    else{
+        trailer[0] = BCC2;
+        trailer[1] = FLAG;
+    }
+
+    //byte stuffin data payload
+    int currentSize = bufSize;
+    for (int i = 1; i<bufSize; i++){
+        if(buffer[i] == 0x7E || buffer[i] == 0x7D){
+            currentSize++; //when we byte stuff the data we need to allocate one more byte
+            trailer = (unsigned char*)realloc(trailer, currentSize);
+            trailer[0] = 0x7D;
+            trailer[1] = BCC2 ^0x20;
+            trailer[2] = FLAG;
+        }
+        else{
+            trailer[0] = BCC2;
+            trailer[1] = FLAG;
+        }        
+    }
 
     return 0;
 }
@@ -269,3 +320,4 @@ int llclose(int showStatistics)
 
     return 1;
 }
+
