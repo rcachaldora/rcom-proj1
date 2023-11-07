@@ -5,6 +5,10 @@
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
 
+int alarmTriggered = FALSE;
+int alarmCount = 0;
+unsigned char informationFrame = 0;
+
 ////////////////////////////////////////////////
 // LLOPEN
 ////////////////////////////////////////////////
@@ -13,7 +17,7 @@ int llopen(LinkLayer connectionParameters)
     int fd = openPort(connectionParameters.serialPort);
     
     if(connectionParameters.role == LlTx)
-        llopenTx(fd);
+        llopenTx(fd, connectionParameters.nRetransmissions, connectionParameters.timeout);
     else if(connectionParameters.role == LlRx)
         llopenRx(fd);
     else
@@ -22,7 +26,7 @@ int llopen(LinkLayer connectionParameters)
     return 1;
 }
 
-int llopenTx(int fd){
+int llopenTx(int fd, int retransmissionsCount, int timeout){
 
     unsigned char SUPFRAME[SUPFRAME_SIZE] = {FLAG, A_SET, C_SET, A_SET^C_SET, FLAG};
 
@@ -32,14 +36,15 @@ int llopenTx(int fd){
     (void) signal(SIGALRM, alarmHandler); // set the alarm to keep track of retransmissions and timeouts
     alarm(timeout);
     alarmTriggered = FALSE;
- 
+    int state;
+
     while(retransmissionsCount > 0 && state != -1 ){ 
 
         bytes = read(fd, SUPFRAME, 1);  //read the frame sent by receiver 
 
         //we should check if fd is not equal to 0
 
-        int state = 0; //setting the starting state
+        state = 0; //setting the starting state
         int a_ua_check = 0; //to store the a_ua and check the bcc1
         int c_ua_check = 0; //to store the c_ua and check the bcc1
 
@@ -66,7 +71,7 @@ int llopenTx(int fd){
                 }
                 printf("0x%02X\n",SUPFRAME[0]);
                 state=2;
-                a_ua = SUPFRAME[0];
+                a_ua_check = SUPFRAME[0];
             }
             case 2: {
                 if(SUPFRAME[0]!=C_UA){
@@ -79,10 +84,10 @@ int llopenTx(int fd){
                 }
                 printf("0x%02X\n",SUPFRAME[0]);
                 state=3;
-                c_ua = SUPFRAME[0];
+                c_ua_check = SUPFRAME[0];
             }   
             case 3: {
-                if(SUPFRAME[0]!=(a_ua^c_ua)){
+                if(SUPFRAME[0]!=(a_ua_check^c_ua_check)){
                     state=0;
                     break;
                 }
@@ -110,7 +115,6 @@ int llopenTx(int fd){
       retransmissionsCount--;
     }
     return fd;
-
 }
 
 int llopenRx(int fd){
@@ -268,11 +272,11 @@ int llwrite(const unsigned char *buf, int bufSize)
 
     //bcc2
     for (int i = 1; i<bufSize; i++){
-        BCC2 = BCC2 ^ buffer[i];
+        BCC2 = BCC2 ^ buf[i];
     }
 
     //byte stuffing bcc2
-    trailerSize = 1;
+    int trailerSize = 1;
     if(BCC2 == 0x7E || BCC2 == 0x7D){
         trailer = (unsigned char*)realloc(trailer, 3);
         trailer[0] = 0x7D;
@@ -288,15 +292,15 @@ int llwrite(const unsigned char *buf, int bufSize)
     //byte stuffing data payload
     int currentSize = bufSize;
     for (int i = 0, k = 0; i<bufSize; i++,k++){
-        if(buffer[i] == 0x7E || buffer[i] == 0x7D){
+        if(buf[i] == 0x7E || buf[i] == 0x7D){
             currentSize++; //when we byte stuff the data we need to allocate one more byte
             dataBuf = (unsigned char*)realloc(trailer, currentSize);
             dataBuf[k] = 0x7D;
-            dataBuf[k+1] = buffer[i] ^0x20;
+            dataBuf[k+1] = buf[i] ^0x20;
             k++;
         }
         else{
-            dataBuf[k] = buffer[i];
+            dataBuf[k] = buf[i];
         }        
     }
 
@@ -305,17 +309,17 @@ int llwrite(const unsigned char *buf, int bufSize)
 
     int j = 0;
     //header
-    for[int i=0, i<4; k++,j++]{
+    for(int i=0; i<4; i++, j++){
         infoframe[j] = header[i];
     }
 
     //data
-    for[int k=0, k<currentSize; k++,j++]{
+    for(int k=0; k<currentSize; k++,j++){
         infoframe[j] = dataBuf[k];
     }
 
     //trailer
-    for[int l=0, l<trailerSize; l++,j++]{
+    for(int l=0; l<trailerSize; l++,j++){
         infoframe[j] = trailer[l];
     }
 
