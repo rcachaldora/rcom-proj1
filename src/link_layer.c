@@ -16,11 +16,9 @@ unsigned char informationFrame = 0;
 int llopen(LinkLayer connectionParameters)
 {
     int fd = openPort(connectionParameters.serialPort);
-
-    retransmissions = connectionParameters.nRetransmissions;
     
     if(connectionParameters.role == LlTx)
-        llopenTx(fd);
+        llopenTx(fd, connectionParameters.nRetransmissions, connectionParameters.timeout);
     else if(connectionParameters.role == LlRx)
         llopenRx(fd);
     else
@@ -29,7 +27,7 @@ int llopen(LinkLayer connectionParameters)
     return 1;
 }
 
-int llopenTx(int fd){
+int llopenTx(int fd, int retransmissionsCount, int timeout){
 
     unsigned char SUPFRAME[SUPFRAME_SIZE] = {FLAG, A_SET, C_SET, A_SET^C_SET, FLAG};
 
@@ -39,16 +37,15 @@ int llopenTx(int fd){
     (void) signal(SIGALRM, alarmHandler); // set the alarm to keep track of retransmissions and timeouts
     alarm(timeout);
     alarmTriggered = FALSE;
-    
-    int retransmissionsCount = retransmissions;
- 
+    int state;
+
     while(retransmissionsCount > 0 && state != -1 ){ 
 
         bytes = read(fd, SUPFRAME, 1);  //read the frame sent by receiver 
 
         //we should check if fd is not equal to 0
 
-        int state = 0; //setting the starting state
+        state = 0; //setting the starting state
         int a_ua_check = 0; //to store the a_ua and check the bcc1
         int c_ua_check = 0; //to store the c_ua and check the bcc1
 
@@ -75,7 +72,7 @@ int llopenTx(int fd){
                 }
                 printf("0x%02X\n",SUPFRAME[0]);
                 state=2;
-                a_ua = SUPFRAME[0];
+                a_ua_check = SUPFRAME[0];
             }
             case 2: {
                 if(SUPFRAME[0]!=C_UA){
@@ -88,10 +85,10 @@ int llopenTx(int fd){
                 }
                 printf("0x%02X\n",SUPFRAME[0]);
                 state=3;
-                c_ua = SUPFRAME[0];
+                c_ua_check = SUPFRAME[0];
             }   
             case 3: {
-                if(SUPFRAME[0]!=(a_ua^c_ua)){
+                if(SUPFRAME[0]!=(a_ua_check^c_ua_check)){
                     state=0;
                     break;
                 }
@@ -119,7 +116,6 @@ int llopenTx(int fd){
       retransmissionsCount--;
     }
     return fd;
-
 }
 
 int llopenRx(int fd){
@@ -462,4 +458,3 @@ int llclose(int showStatistics)
 
     return 1;
 }
-
