@@ -60,6 +60,7 @@ typedef enum
 #define C_REJ0  0X01
 #define C_REJ1  0X81
 #define C_DISC  0x0B
+#define ESC     0x7D
 
 // Open a connection using the "port" parameters defined in struct linkLayer.
 // Return "1" on success or "-1" on error.

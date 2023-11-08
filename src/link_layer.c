@@ -345,7 +345,7 @@ int llwrite(const unsigned char *buf, int bufSize)
 
         while(status == NONE){
             read(fd, SUPFRAME, 1);
-            while (state != 6 && alarmTriggered == FALSE){
+            while (state < 6 && alarmTriggered == FALSE){
                 switch (state){
                         case 0 :{
                             if(SUPFRAME[0]!=FLAG){
@@ -446,7 +446,80 @@ int llwrite(const unsigned char *buf, int bufSize)
 ////////////////////////////////////////////////
 int llread(unsigned char *packet)
 {
-    // TODO
+    
+    unsigned char buf;
+    int state=0;
+    int a_set = 0;
+    int c_set = 0;
+
+    while(state>=0){
+        read(fd, buf, 1);
+
+        switch(state){
+            case 0:{
+                if(buf!=FLAG){
+                    state=0;
+                    break;
+                }
+                printf("0x%02X\n",buf);
+                state = 1;
+            }
+            case 1:{
+                if(buf!=A_SET){
+                    state=0;
+                    break;
+                }
+                else if(buf==FLAG){
+                    state=1;
+                    break;
+                }
+                printf("0x%02X\n",buf);
+                state = 2;
+                a_set = buf;
+            }
+            case 2:{
+                if(buf==C_N(0) || buf==C_N(1)){
+                    state=3;
+                    break;
+                }
+                else if(buf==FLAG){
+                    state=1;
+                    break;
+                }
+                else if(buf==C_DISC){
+                    unsigned char FRAME[5] = {FLAG, A_SET, C_DISC, A_SET^C_DISC, FLAG};
+                    return write(fd, FRAME, 5);
+                    return 0;
+                }
+                else{
+                    state=0;
+                    break;
+                }
+                printf("0x%02X\n",buf);
+            }
+            case 3:{
+                if(buf!=(a_set^c_set)){
+                    state=4; 
+                    break;
+                }
+                else if(buf==FLAG){
+                    state=1;
+                    break;
+                }
+                printf("0x%02X\n",buf);
+                state = 4;
+            }
+            case 4:{
+                if(buf==ESC){
+                    state=5;
+                    break;
+                }
+                printf("0x%02X\n",buf);
+                state = 5;
+            }
+            
+        }
+    }
 
     return 0;
 }
