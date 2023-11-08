@@ -8,7 +8,8 @@
 int alarmTriggered = FALSE;
 int retransmissions = 0;
 int alarmCount = 0;
-unsigned char informationFrame = 0;
+int timeout = 0;
+unsigned char iformationFrame = 0;
 
 
 ////////////////////////////////////////////////
@@ -409,8 +410,6 @@ int llwrite(const unsigned char *buf, int bufSize)
                         }        
                 }
             }
-
-    
         }
 
         if(c_set==C_RR0 || c_set==C_RR1){
