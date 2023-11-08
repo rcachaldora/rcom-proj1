@@ -7,6 +7,7 @@
 
 int alarmTriggered = FALSE;
 int retransmissions = 0;
+int alarmCount = 0;
 unsigned char informationFrame = 0;
 
 
@@ -130,7 +131,7 @@ int llopenRx(int fd){
     int a_set = 0;
     int c_set = 0;
 
-    while(retransmissionsCount > 0 && state != -1 ){ 
+    while(retransmissions > 0 && state != -1 ){ 
 
         switch (state){
                 case 0 :{
@@ -276,11 +277,11 @@ int llwrite(const unsigned char *buf, int bufSize)
 
     //bcc2
     for (int i = 1; i<bufSize; i++){
-        BCC2 = BCC2 ^ buffer[i];
+        BCC2 = BCC2 ^ buf[i];
     }
 
     //byte stuffing bcc2
-    trailerSize = 1;
+    unsigned char trailerSize = 1;
     if(BCC2 == 0x7E || BCC2 == 0x7D){
         trailer = (unsigned char*)realloc(trailer, 3);
         trailer[0] = 0x7D;
@@ -296,15 +297,15 @@ int llwrite(const unsigned char *buf, int bufSize)
     //byte stuffing data payload
     int currentSize = bufSize;
     for (int i = 0, k = 0; i<bufSize; i++,k++){
-        if(buffer[i] == 0x7E || buffer[i] == 0x7D){
+        if(buf[i] == 0x7E || buf[i] == 0x7D){
             currentSize++; //when we byte stuff the data we need to allocate one more byte
             dataBuf = (unsigned char*)realloc(trailer, currentSize);
             dataBuf[k] = 0x7D;
-            dataBuf[k+1] = buffer[i] ^0x20;
+            dataBuf[k+1] = buf[i] ^0x20;
             k++;
         }
         else{
-            dataBuf[k] = buffer[i];
+            dataBuf[k] = buf[i];
         }        
     }
 
@@ -313,17 +314,17 @@ int llwrite(const unsigned char *buf, int bufSize)
 
     int j = 0;
     //header
-    for[int i=0, i<4; k++,j++]{
+    for(int i=0; i<4; i++,j++){
         infoframe[j] = header[i];
     }
 
     //data
-    for[int k=0, k<currentSize; k++,j++]{
+    for(int k=0; k<currentSize; k++,j++){
         infoframe[j] = dataBuf[k];
     }
 
     //trailer
-    for[int l=0, l<trailerSize; l++,j++]{
+    for(int l=0; l<trailerSize; l++,j++){
         infoframe[j] = trailer[l];
     }
 
@@ -340,6 +341,7 @@ int llwrite(const unsigned char *buf, int bufSize)
         int a_set = 0;
         int c_set = 0;
 
+        unsigned char SUPFRAME[SUPFRAME_SIZE] = {0};
 
         while(status == NONE){
             read(fd, SUPFRAME, 1);

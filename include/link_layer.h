@@ -30,11 +30,12 @@ typedef struct
     int timeout;
 } LinkLayer;
 
-enum FrameStatus {
-  C_RR,
-  C_REJ,
-  NONE
-};
+typedef enum
+{
+    C_RR,
+    C_REJ,
+    NONE,
+} FrameStatus;
 
 #define BAUDRATE 38400
 
@@ -48,16 +49,17 @@ enum FrameStatus {
 
 #define SUPFRAME_SIZE 5 //
 
-#define FLAG   0x7E
-#define A_SET  0x03
-#define C_SET  0x03
-#define A_UA   0x01
-#define C_UA   0x07
+#define FLAG    0x7E
+#define A_SET   0x03
+#define C_SET   0x03
+#define A_UA    0x01
+#define C_UA    0x07
 #define C_N(n)  (n << 6)
 #define C_RR0   0X05
 #define C_RR1   0X85
 #define C_REJ0  0X01
 #define C_REJ1  0X81
+#define C_DISC  0x0B
 
 // Open a connection using the "port" parameters defined in struct linkLayer.
 // Return "1" on success or "-1" on error.
