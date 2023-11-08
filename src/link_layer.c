@@ -6,8 +6,9 @@
 #define _POSIX_SOURCE 1 // POSIX compliant source
 
 int alarmTriggered = FALSE;
-int alarmCount = 0;
+int retransmissions = 0;
 unsigned char informationFrame = 0;
+
 
 ////////////////////////////////////////////////
 // LLOPEN
@@ -129,66 +130,69 @@ int llopenRx(int fd){
     int a_set = 0;
     int c_set = 0;
 
-    switch (state){
-            case 0 :{
-                if(SUPFRAME[0]!=FLAG){
-                    state=0;
-                    break;
+    while(retransmissionsCount > 0 && state != -1 ){ 
+
+        switch (state){
+                case 0 :{
+                    if(SUPFRAME[0]!=FLAG){
+                        state=0;
+                        break;
+                    }
+                    printf("0x%02X\n",SUPFRAME[0]);
+                    state = 1;
                 }
-                printf("0x%02X\n",SUPFRAME[0]);
-                state = 1;
-            }
-            case 1: {
-                if(SUPFRAME[0]!=A_SET){
-                    state=0;
-                    break;
+                case 1: {
+                    if(SUPFRAME[0]!=A_SET){
+                        state=0;
+                        break;
+                    }
+                    else if(SUPFRAME[0]==FLAG){
+                        state=1;
+                        break;
+                    }
+                    printf("0x%02X\n",SUPFRAME[0]);
+                    state = 2;
+                    a_set = SUPFRAME[0];
                 }
-                else if(SUPFRAME[0]==FLAG){
-                    state=1;
-                    break;
+                case 2: {
+                    if(SUPFRAME[0]!=C_SET){
+                        state = 0;
+                        break;
+                    }
+                    else if(SUPFRAME[0]==FLAG){
+                        state=1;
+                        break;
+                    }
+                    printf("0x%02X\n",SUPFRAME[0]);
+                    state = 3;
+                    c_set = SUPFRAME[0];
+                }   
+                case 3: {
+                    if(SUPFRAME[0]!=(a_set^c_set)){
+                        state=0;
+                        break;
+                    }
+                    else if(SUPFRAME[0]==FLAG){
+                        state=1;
+                        break;
+                    }
+                    printf("0x%02X\n",SUPFRAME[0]);
+                    state = 4;
+                }   
+                case 4:{
+                    if(SUPFRAME[0]!=FLAG){
+                        state=0;
+                        break;
+                    }
+                    printf("0x%02X\n",SUPFRAME[0]);
+                    state = 5;
                 }
-                printf("0x%02X\n",SUPFRAME[0]);
-                state = 2;
-                a_set = SUPFRAME[0];
-            }
-            case 2: {
-                if(SUPFRAME[0]!=C_SET){
+                case 5:{
                     state = 0;
                     break;
-                }
-                else if(SUPFRAME[0]==FLAG){
-                    state=1;
-                    break;
-                }
-                printf("0x%02X\n",SUPFRAME[0]);
-                state = 3;
-                c_set = SUPFRAME[0];
-            }   
-            case 3: {
-                if(SUPFRAME[0]!=(a_set^c_set)){
-                    state=0;
-                    break;
-                }
-                else if(SUPFRAME[0]==FLAG){
-                    state=1;
-                    break;
-                }
-                printf("0x%02X\n",SUPFRAME[0]);
-                state = 4;
-            }   
-            case 4:{
-                if(SUPFRAME[0]!=FLAG){
-                    state=0;
-                    break;
-                }
-                printf("0x%02X\n",SUPFRAME[0]);
-                state = 5;
-            }
-            case 5:{
-                state = 0;
-                break;
-            }        
+                }        
 
+        }
     }
 
     unsigned char TxSUPFRAME[SUPFRAME_SIZE] = {FLAG, A_UA, C_UA, A_UA^C_UA, FLAG};
@@ -264,7 +268,7 @@ void alarmHandler(int signal) {
 ////////////////////////////////////////////////
 int llwrite(const unsigned char *buf, int bufSize)
 {
-    unsigned char header[4] = {FLAG, A_SET, (linkLayer.sequenceNumber == 0? C_I0 : C_I1), (header[1]^header[2])};
+    unsigned char header[4] = {FLAG, A_SET, C_N(informationFrame), (header[1]^header[2])};
     unsigned char *dataBuf = (unsigned char*) malloc(bufSize);
 
     unsigned char BCC2 = buf[0];
@@ -272,11 +276,11 @@ int llwrite(const unsigned char *buf, int bufSize)
 
     //bcc2
     for (int i = 1; i<bufSize; i++){
-        BCC2 = BCC2 ^ buf[i];
+        BCC2 = BCC2 ^ buffer[i];
     }
 
     //byte stuffing bcc2
-    int trailerSize = 1;
+    trailerSize = 1;
     if(BCC2 == 0x7E || BCC2 == 0x7D){
         trailer = (unsigned char*)realloc(trailer, 3);
         trailer[0] = 0x7D;
@@ -292,15 +296,15 @@ int llwrite(const unsigned char *buf, int bufSize)
     //byte stuffing data payload
     int currentSize = bufSize;
     for (int i = 0, k = 0; i<bufSize; i++,k++){
-        if(buf[i] == 0x7E || buf[i] == 0x7D){
+        if(buffer[i] == 0x7E || buffer[i] == 0x7D){
             currentSize++; //when we byte stuff the data we need to allocate one more byte
             dataBuf = (unsigned char*)realloc(trailer, currentSize);
             dataBuf[k] = 0x7D;
-            dataBuf[k+1] = buf[i] ^0x20;
+            dataBuf[k+1] = buffer[i] ^0x20;
             k++;
         }
         else{
-            dataBuf[k] = buf[i];
+            dataBuf[k] = buffer[i];
         }        
     }
 
@@ -309,18 +313,127 @@ int llwrite(const unsigned char *buf, int bufSize)
 
     int j = 0;
     //header
-    for(int i=0; i<4; i++, j++){
+    for[int i=0, i<4; k++,j++]{
         infoframe[j] = header[i];
     }
 
     //data
-    for(int k=0; k<currentSize; k++,j++){
+    for[int k=0, k<currentSize; k++,j++]{
         infoframe[j] = dataBuf[k];
     }
 
     //trailer
-    for(int l=0; l<trailerSize; l++,j++){
+    for[int l=0, l<trailerSize; l++,j++]{
         infoframe[j] = trailer[l];
+    }
+
+    for(int retransmissionsCount = retransmissions; retransmissionsCount>0; retransmissionsCount++){
+        alarm(timeout);
+        alarmTriggered = FALSE;
+        FrameStatus status = NONE;
+
+        
+        write(fd, infoframe, infoframeSize); //nao sei se aqui e infoframeSize, vi outro que tem J 
+            
+        int state=0; //1-FLAG_RCV, 2-A_RCV, 3-C_RCV, 4-BCC_OK, 5-STOP
+
+        int a_set = 0;
+        int c_set = 0;
+
+
+        while(status == NONE){
+            read(fd, SUPFRAME, 1);
+            while (state != 6 && alarmTriggered == FALSE){
+                switch (state){
+                        case 0 :{
+                            if(SUPFRAME[0]!=FLAG){
+                                state=0;
+                                break;
+                            }
+                            printf("0x%02X\n",SUPFRAME[0]);
+                            state = 1;
+                        }
+                        case 1: {
+                            if(SUPFRAME[0]!=A_SET){
+                                state=0;
+                                break;
+                            }
+                            else if(SUPFRAME[0]==FLAG){
+                                state=1;
+                                break;
+                            }
+                            printf("0x%02X\n",SUPFRAME[0]);
+                            state = 2;
+                            a_set = SUPFRAME[0];
+                        }
+                        case 2: {
+                            if(SUPFRAME[0]==C_RR0 || SUPFRAME[0]==C_RR1 || SUPFRAME[0]==C_REJ0 || SUPFRAME[0]==C_REJ1 || SUPFRAME[0]==C_DISC){
+                                state = 3;
+                                c_set = SUPFRAME[0];
+                                break;
+                            }
+                            else if(SUPFRAME[0]==FLAG){
+                                state=1;
+                                break;
+                            }
+                            else{
+                                state = 0;
+                            }
+                            printf("0x%02X\n",SUPFRAME[0]);
+                        }   
+                        case 3: {
+                            if(SUPFRAME[0]!=(a_set^c_set)){
+                                state=0;
+                                break;
+                            }
+                            else if(SUPFRAME[0]==FLAG){
+                                state=1;
+                                break;
+                            }
+                            printf("0x%02X\n",SUPFRAME[0]);
+                            state = 4;
+                        }   
+                        case 4:{
+                            if(SUPFRAME[0]!=FLAG){
+                                state=0;
+                                break;
+                            }
+                            printf("0x%02X\n",SUPFRAME[0]);
+                            state = 5;
+                        }
+                        case 5:{
+
+                            break;
+                        }        
+                }
+            }
+
+    
+        }
+
+        if(c_set==C_RR0 || c_set==C_RR1){
+            status = C_RR;
+        }
+        else if(c_set==C_REJ0 || c_set==C_REJ1){
+            status = C_REJ;
+        }
+        else{
+            continue;
+        }    
+        if(status == C_RR) break;
+
+    }
+    free(infoframe);
+    free(dataBuf);
+    free(trailer);
+    free(header);
+
+    if(status==C_RR){
+        return infoframeSize;
+    }
+    else{
+        llclose(fd);
+        return -1;
     }
 
     return 0;
@@ -345,4 +458,3 @@ int llclose(int showStatistics)
 
     return 1;
 }
-
