@@ -37,100 +37,123 @@ int llopen(LinkLayer connectionParameters)
 }
 
 int llopenTx(int fd){
+    //printf("entrou llopentx\n");
 
     unsigned char SUPFRAME[SUPFRAME_SIZE] = {FLAG, A_SET, C_SET, A_SET^C_SET, FLAG};
 
-    int bytes = write(fd, SUPFRAME, SUPFRAME_SIZE);
-    printf("%d bytes written\n", bytes);
 
     (void) signal(SIGALRM, alarmHandler); // set the alarm to keep track of retransmissions and timeouts
-    alarm(timeout);
-    alarmTriggered = FALSE;
-    int state;
+    
+    int state = 0;
+    unsigned char  byte = 0;
+    int a_ua_check = 0; //to store the a_ua and check the bcc1
+    int c_ua_check = 0; //to store the c_ua and check the bcc1
 
     while(retransmitions != 0 && state != -1 ){ 
+        int bytes = write(fd, SUPFRAME, SUPFRAME_SIZE);
+        printf("%d bytes written\n", bytes);
+        alarm(timeout);
+        alarmTriggered = FALSE;
 
-        bytes = read(fd, SUPFRAME, 1);  //read the frame sent by receiver 
+        while(alarmTriggered==FALSE && state != -1){
+            bytes = read(fd, &byte, 1);  //read the frame sent by receiver
+            /*printf("0x%02X\n", byte[0]);
+            printf("0x%02X\n", byte[1]);
+            printf("0x%02X\n", byte[2]);
+            printf("0x%02X\n", byte[3]);
+            printf("0x%02X\n", byte[4]);*/
 
-        //we should check if fd is not equal to 0
+            if(bytes == 0){
+                continue;
+            }            
 
-        state = 0; //setting the starting state
-        int a_ua_check = 0; //to store the a_ua and check the bcc1
-        int c_ua_check = 0; //to store the c_ua and check the bcc1
+            switch (state){
 
-        switch (state){
-
-            case 0 :{
-                if(SUPFRAME[0]!=FLAG){
-                    state=0;
+                case 0 :{
+                    if(byte!=FLAG){
+                        state=0;
+                        printf("nao e a flag tx\n");
+                        break;
+                    }
+                    printf("0x%02X\n",byte);
+                    state = 1;
                     break;
                 }
-                printf("0x%02X\n",SUPFRAME[0]);
-                state = 1;
-            }
-            case 1: {
-                if(SUPFRAME[0]!=A_UA){
-                    state=0;
+                case 1: {
+                    if(byte!=A_UA){
+                        state=0;
+                        printf("0x%02X\n",byte);
+                        break;
+                    }
+                    else if(byte==FLAG){
+                        state=1;
+                        break;
+                    }
+                    printf("0x%02X\n",byte);
+                    state=2;
+                    a_ua_check = byte;
+                    //printf("a_ua_check = 0x%02X\n",a_ua_check);
                     break;
                 }
-                else if(SUPFRAME[1]==FLAG){
-                    state=1;
+                case 2: {
+                    if(byte!=C_UA){
+                        state = 0;
+                        break;
+                    }
+                    else if(byte==FLAG){
+                        state=1;
+                        break;
+                    }
+                    printf("0x%02X\n",byte);
+                    state=3;
+                    c_ua_check = byte;
+                    //printf("c_ua_check = 0x%02X\n",c_ua_check);
+                    break;
+                }   
+                case 3: {
+                    if(byte!=(a_ua_check^c_ua_check)){
+                        state=0;
+                        break;
+                    }
+                    else if(byte==FLAG){
+                        state=1;
+                        break;
+                    }
+                    printf("0x%02X\n",byte);
+                    state = 4;
+                    break;
+                }   
+                case 4:{
+                    if(byte!=FLAG){
+                        state=0;
+                        break;
+                    }
+                    printf("0x%02X\n",byte);
+                    state = 5;
                     break;
                 }
-                printf("0x%02X\n",SUPFRAME[0]);
-                state=2;
-                a_ua_check = SUPFRAME[0];
-            }
-            case 2: {
-                if(SUPFRAME[0]!=C_UA){
-                    state = 0;
+                case 5:{
+                    state = -1;
+                    printf("0x%02X\n",byte);
                     break;
                 }
-                else if(SUPFRAME[0]==FLAG){
-                    state=1;
+                default:{
+                    state = -1;
                     break;
                 }
-                printf("0x%02X\n",SUPFRAME[0]);
-                state=3;
-                c_ua_check = SUPFRAME[0];
-            }   
-            case 3: {
-                if(SUPFRAME[0]!=(a_ua_check^c_ua_check)){
-                    state=0;
-                    break;
-                }
-                else if(SUPFRAME[0]==FLAG){
-                    state=1;
-                    break;
-                }
-                printf("0x%02X\n",SUPFRAME[0]);
-                state = 4;
-            }   
-            case 4:{
-                if(SUPFRAME[0]!=FLAG){
-                    state=0;
-                    break;
-                }
-                printf("0x%02X\n",SUPFRAME[0]);
-                state = 5;
-            }
-            case 5:{
-                state = 0;
-                printf("0x%02X\n",SUPFRAME[0]);
-                break;
             }
         }
-      retransmitions--;
+        retransmitions--;
     }
     return fd;
 }
 
 int llopenRx(int fd){
+    //printf("entrou llopenrx\n");
 
 
     unsigned char SUPFRAME[SUPFRAME_SIZE] = {0};
 
-    int bytes = read(fd, SUPFRAME, 1);
 
     int state=0; //1-FLAG_RCV, 2-A_RCV, 3-C_RCV, 4-BCC_OK, 5-STOP
 
@@ -139,27 +162,37 @@ int llopenRx(int fd){
 
     while(retransmitions > 0 && state != -1 ){ 
 
+        int bytes = read(fd, &SUPFRAME, 1);
+        if(bytes == 0) continue;
         switch (state){
+            
                 case 0 :{
                     if(SUPFRAME[0]!=FLAG){
                         state=0;
+                        printf("0x%02X\n",SUPFRAME[0]);
+                        printf("nao e a flag rx\n");
+                        state = -1; //tirar depois
                         break;
                     }
                     printf("0x%02X\n",SUPFRAME[0]);
                     state = 1;
+                    break;
                 }
                 case 1: {
                     if(SUPFRAME[0]!=A_SET){
                         state=0;
+                        printf("0x%02X\n",SUPFRAME[0]);
                         break;
                     }
                     else if(SUPFRAME[0]==FLAG){
                         state=1;
+                        printf("0x%02X\n",SUPFRAME[0]);
                         break;
                     }
                     printf("0x%02X\n",SUPFRAME[0]);
                     state = 2;
                     a_set = SUPFRAME[0];
+                    break;
                 }
                 case 2: {
                     if(SUPFRAME[0]!=C_SET){
@@ -173,6 +206,7 @@ int llopenRx(int fd){
                     printf("0x%02X\n",SUPFRAME[0]);
                     state = 3;
                     c_set = SUPFRAME[0];
+                    break;
                 }   
                 case 3: {
                     if(SUPFRAME[0]!=(a_set^c_set)){
@@ -185,6 +219,7 @@ int llopenRx(int fd){
                     }
                     printf("0x%02X\n",SUPFRAME[0]);
                     state = 4;
+                    break;
                 }   
                 case 4:{
                     if(SUPFRAME[0]!=FLAG){
@@ -193,9 +228,10 @@ int llopenRx(int fd){
                     }
                     printf("0x%02X\n",SUPFRAME[0]);
                     state = 5;
+                    break;
                 }
                 case 5:{
-                    state = 0;
+                    state = -1;
                     break;
                 }        
 
@@ -204,7 +240,14 @@ int llopenRx(int fd){
 
     unsigned char TxSUPFRAME[SUPFRAME_SIZE] = {FLAG, A_UA, C_UA, A_UA^C_UA, FLAG};
 
-    bytes = write(fd, TxSUPFRAME, SUPFRAME_SIZE);
+    /*
+    printf("0x%02X\n",TxSUPFRAME[0]);
+    printf("0x%02X\n",TxSUPFRAME[1]);
+    printf("0x%02X\n",TxSUPFRAME[2]);
+    printf("0x%02X\n",TxSUPFRAME[3]);
+    printf("0x%02X\n",TxSUPFRAME[4]);
+    */
+    int bytes = write(fd, TxSUPFRAME, SUPFRAME_SIZE);
 
     printf("%d bytes written\n", bytes);
 
@@ -259,8 +302,9 @@ int openPort(const char* serialPort){
     if (tcsetattr(fd, TCSANOW, &newtio) == -1)
     {
         perror("tcsetattr");
-        exit(-1);
+        return -1;
     }
+    //printf("%d fd\n", fd);
 
     return fd;
 }

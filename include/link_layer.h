@@ -47,7 +47,7 @@ typedef enum
 #define FALSE 0
 #define TRUE 1
 
-#define SUPFRAME_SIZE 5 //
+#define SUPFRAME_SIZE 5 
 
 #define FLAG    0x7E
 #define A_SET   0x03
