@@ -54,11 +54,12 @@ typedef enum
 #define C_SET   0x03
 #define A_UA    0x01
 #define C_UA    0x07
-#define C_N(n)  (n << 6)
+#define C_N(n)  (n << 6) // 00000000 || 01000000
 #define C_RR0   0X05
 #define C_RR1   0X85
 #define C_REJ0  0X01
 #define C_REJ1  0X81
+#define C_REJ(n) (n << 7 | 0x01) // 00000000 || 10000000
 #define C_DISC  0x0B
 #define ESC     0x7D
 
@@ -66,7 +67,7 @@ typedef enum
 // Return "1" on success or "-1" on error.
 int llopen(LinkLayer connectionParameters);
 
-int llopenTx(int fd, int retransmissionsCount, int timeout);
+int llopenTx(int fd);
 int llopenRx(int fd);
 
 int openPort(const char* serialPort);
@@ -75,17 +76,18 @@ void alarmHandler(int signal);
 
 // Send data in buf with size bufSize.
 // Return number of chars written, or "-1" on error.
-int llwrite(const unsigned char *buf, int bufSize);
+int llwrite(int fd, const unsigned char *buf, int bufSize);
 
 // Receive data in packet.
 // Return number of chars read, or "-1" on error.
-int llread(unsigned char *packet);
+int llread(int fd, unsigned char *packet);
 
 // Close previously opened connection.
 // if showStatistics == TRUE, link layer should print statistics in the console on close.
 // Return "1" on success or "-1" on error.
 int llclose(int showStatistics);
 
-
+int llcloseTx(int fd);
+int llcloseRx(int fd);
 
 #endif // _LINK_LAYER_H_
