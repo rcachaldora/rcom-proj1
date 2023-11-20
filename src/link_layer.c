@@ -416,6 +416,9 @@ int llwrite(int fd,const unsigned char *buf, int bufSize)
         while(status == NONE){
             printf("entered while to read\n");
             bytes = read(fd, SUPFRAME, 1);
+            printf("after read statement\n");
+            printf("0x%02X\n",buf);
+            printf("0x%02X\n",bytes);
 
             if(bytes == 0) continue;
             
@@ -545,12 +548,17 @@ int llread(int fd, unsigned char *packet){
         printf("entering while\n");
         bytes = read(fd, &buf, 1);
         printf("after read statement\n");
+        printf("0x%02X\n",buf);
+        printf("0x%02X\n",bytes);
 
-        if(bytes == 0) continue;
-
-        if(bytes > 0) {
-            bufSize++;
+        if (bytes == 0){
+            continue;
         }
+        
+        //if(bytes > 0) {
+        //    bufSize++;
+        //    printf("0x%02X\n",bufSize);
+        //}
         switch(state){
             case 0:{
                 if(buf!=FLAG){
