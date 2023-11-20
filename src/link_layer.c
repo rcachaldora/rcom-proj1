@@ -26,14 +26,17 @@ int llopen(LinkLayer connectionParameters)
     retransmitions =  connectionParameters.nRetransmissions;
     ROLE = connectionParameters.role;
     
+    printf("picking role\n");
     if(ROLE == LlTx)
         llopenTx(fd);
     else if(ROLE == LlRx)
         llopenRx(fd);
     else
         return -1;
+    printf("successful llopen\n");
 
-    return 1;
+    retransmitions =  connectionParameters.nRetransmissions;
+    return fd;
 }
 
 int llopenTx(int fd){
@@ -325,10 +328,12 @@ int llwrite(int fd,const unsigned char *buf, int bufSize)
     unsigned char BCC2 = buf[0];
     unsigned char *trailer = (unsigned char*)malloc(2); 
 
+    printf("bcc2 = 0x%02X\n",BCC2);
     //bcc2
     for (int i = 1; i<bufSize; i++){
         BCC2 = BCC2 ^ buf[i];
     }
+    printf("bcc2 = 0x%02X\n",BCC2);
 
     //byte stuffing bcc2
     unsigned char trailerSize = 1;
@@ -338,11 +343,15 @@ int llwrite(int fd,const unsigned char *buf, int bufSize)
         trailer[1] = BCC2 ^0x20;
         trailer[2] = FLAG;
         trailerSize++;
+        printf("byte stuffed bcc2\n");
     }
     else{
         trailer[0] = BCC2;
         trailer[1] = FLAG;
+        printf("bcc2 not stuffed\n");
     }
+
+    printf("byte stuffing data payload\n");
 
     //byte stuffing data payload
     int currentSize = bufSize;
@@ -353,9 +362,15 @@ int llwrite(int fd,const unsigned char *buf, int bufSize)
             dataBuf[k] = 0x7D;
             dataBuf[k+1] = buf[i] ^0x20;
             k++;
+            printf("byte stuffed data\n");
+            printf("0x%02X\n",buf[i]);
+            printf("0x%02X\n",dataBuf[k]);
+            printf("0x%02X\n",dataBuf[k+1]);
         }
         else{
             dataBuf[k] = buf[i];
+            printf("data not stuffed\n");
+            printf("0x%02X\n",dataBuf[k]);
         }        
     }
 
@@ -363,16 +378,17 @@ int llwrite(int fd,const unsigned char *buf, int bufSize)
     unsigned char infoframe[infoframeSize];
 
     int j = 0;
+    printf("starting to fill infoframe header\n");
     //header
     for(int i=0; i<4; i++,j++){
         infoframe[j] = header[i];
     }
-
+    printf("starting to fill infoframe data\n");
     //data
     for(int k=0; k<currentSize; k++,j++){
         infoframe[j] = dataBuf[k];
     }
-
+    printf("starting to fill infoframe trailer\n");
     //trailer
     for(int l=0; l<trailerSize; l++,j++){
         infoframe[j] = trailer[l];
@@ -380,21 +396,30 @@ int llwrite(int fd,const unsigned char *buf, int bufSize)
 
     FrameStatus status = NONE;
 
-    for(int retransmitionsCount = retransmitions; retransmitionsCount>0; retransmitionsCount++){
+    printf("starting to write\n");
+    printf("ret = %d\n",retransmitions);
+    for(int retransmitionsCount = retransmitions; retransmitionsCount>0; retransmitionsCount--){
+        printf("entering the loop\n");
+        printf("retransmitionsCount = %d\n",retransmitionsCount);
         alarm(timeout);
         alarmTriggered = FALSE;
         
-        write(fd, infoframe, infoframeSize); //nao sei se aqui e infoframeSize, vi outro que tem J 
-            
+        int bytes = write(fd, infoframe, infoframeSize); //nao sei se aqui e infoframeSize, vi outro que tem J 
+        printf("%d bytes written\n", infoframeSize);
         int state=0; //1-FLAG_RCV, 2-A_RCV, 3-C_RCV, 4-BCC_OK, 5-STOP
 
         int a_set = 0;
         int c_set = 0;
 
         unsigned char SUPFRAME[SUPFRAME_SIZE] = {0};
-
+        printf("entering while to read\n");
         while(status == NONE){
-            read(fd, SUPFRAME, 1);
+            printf("entered while to read\n");
+            bytes = read(fd, SUPFRAME, 1);
+
+            if(bytes == 0) continue;
+            
+            printf("starting to read\n");
             while (state < 6 && alarmTriggered == FALSE){
                 switch (state){
                         case 0 :{
@@ -463,21 +488,30 @@ int llwrite(int fd,const unsigned char *buf, int bufSize)
 
         if(c_set==C_RR0 || c_set==C_RR1){
             status = C_RR;
+            printf("status = C_RR\n");
         }
         else if(c_set==C_REJ0 || c_set==C_REJ1){
             status = C_REJ;
+            printf("status = C_REJ\n");
         }
         else{
             continue;
+            printf("status = NONE\n");
         }    
         if(status == C_RR) break;
 
     }
-    free(infoframe);
-    free(dataBuf);
-    free(trailer);
-    free(header);
 
+    printf("starting to free\n");
+    //free(infoframe);
+    //printf("infoframe\n");
+    free(dataBuf);
+    printf("dataBuf\n");
+    free(trailer);
+    printf("trailer\n");
+    //free(header);
+    printf("header\n");
+    
     if(status==C_RR){
         return infoframeSize;
     }
@@ -501,15 +535,22 @@ int llread(int fd, unsigned char *packet){
     int c_set = 0;
     int acum=0;
     int bcc2=0;
+    int bytes;
+
+    printf("starting to llread\n");
+
+
 
     while(state>=0){
-        if(read(fd, &buf, 1) > 0) {
+        printf("entering while\n");
+        bytes = read(fd, &buf, 1);
+        printf("after read statement\n");
+
+        if(bytes == 0) continue;
+
+        if(bytes > 0) {
             bufSize++;
         }
-    }
-    while(state>=0){
-        read(fd, &buf, 1);
-
         switch(state){
             case 0:{
                 if(buf!=FLAG){
@@ -593,13 +634,13 @@ int llread(int fd, unsigned char *packet){
                     if(bcc2 == acum){
                         state = 5;
                         unsigned char FRAME[SUPFRAME_SIZE] = {FLAG, A_UA, C_N(frameRx), A_UA^C_N(frameRx), FLAG};
-                        write(fd, FRAME, SUPFRAME_SIZE);
+                        bytes = write(fd, FRAME, SUPFRAME_SIZE);
                         frameRx=(frameRx+1)%2;
                         return i;
                     }
                     else{
                         unsigned char FRAME[SUPFRAME_SIZE] = {FLAG, A_UA, C_REJ(frameRx), A_UA^C_N(frameRx), FLAG};
-                        write(fd, FRAME, SUPFRAME_SIZE);
+                        bytes = write(fd, FRAME, SUPFRAME_SIZE);
                         return -1;
                     }
                 }

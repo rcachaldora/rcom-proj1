@@ -15,5 +15,29 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     ll.timeout = timeout;
 
 
-    llopen(ll);
+    int fd = llopen(ll);
+    
+
+    if (ll.role == LlTx) {
+        // Create some data to write
+        const unsigned char *dataToWrite = "Hello, world}";
+        int dataSize = strlen(dataToWrite) + 1; // +1 for the null terminator
+
+        // Call llwrite and print the result
+
+        int writeResult = llwrite(fd, dataToWrite, dataSize);
+        printf("llwrite result: %d\n", writeResult);
+    } else if (ll.role == LlRx) {
+        // Create a buffer to read data into
+        unsigned char readBuffer[1024];
+
+        // Call llread and print the result
+        int readResult = llread(fd, readBuffer);
+        printf("llread result: %d\n", readResult);
+
+        // If the read was successful, print the data
+        if (readResult >= 0) {
+            printf("Read data: %s\n", readBuffer);
+        }
+    }
 }
