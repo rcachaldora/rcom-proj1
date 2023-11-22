@@ -336,11 +336,11 @@ int llwrite(int fd,const unsigned char *buf, int bufSize)
     printf("bcc2 = 0x%02X\n",BCC2);
 
     //byte stuffing bcc2
-    unsigned char trailerSize = 1;
+    int trailerSize = 2;
     if(BCC2 == 0x7E || BCC2 == 0x7D){
         trailer = (unsigned char*)realloc(trailer, 3);
         trailer[0] = 0x7D;
-        trailer[1] = BCC2 ^0x20;
+        trailer[1] = BCC2 ^ 0x20;
         trailer[2] = FLAG;
         trailerSize++;
         printf("byte stuffed bcc2\n");
@@ -358,7 +358,7 @@ int llwrite(int fd,const unsigned char *buf, int bufSize)
     for (int i = 0, k = 0; i<bufSize; i++,k++){
         if(buf[i] == 0x7E || buf[i] == 0x7D){
             currentSize++; //when we byte stuff the data we need to allocate one more byte
-            dataBuf = (unsigned char*)realloc(trailer, currentSize);
+            dataBuf = (unsigned char*)realloc(dataBuf, currentSize);
             dataBuf[k] = 0x7D;
             dataBuf[k+1] = buf[i] ^0x20;
             k++;
@@ -375,23 +375,26 @@ int llwrite(int fd,const unsigned char *buf, int bufSize)
     }
 
     int infoframeSize = currentSize + 4 + trailerSize;
-    unsigned char infoframe[infoframeSize];
+    unsigned char *infoframe[infoframeSize];
 
     int j = 0;
     printf("starting to fill infoframe header\n");
     //header
     for(int i=0; i<4; i++,j++){
         infoframe[j] = header[i];
+        printf("0x%02X\n",infoframe[j]);
     }
     printf("starting to fill infoframe data\n");
     //data
     for(int k=0; k<currentSize; k++,j++){
         infoframe[j] = dataBuf[k];
+        printf("0x%02X\n",infoframe[j]);
     }
     printf("starting to fill infoframe trailer\n");
     //trailer
     for(int l=0; l<trailerSize; l++,j++){
         infoframe[j] = trailer[l];
+        printf("0x%02X\n",infoframe[j]);
     }
 
     FrameStatus status = NONE;
@@ -411,14 +414,13 @@ int llwrite(int fd,const unsigned char *buf, int bufSize)
         int a_set = 0;
         int c_set = 0;
 
-        unsigned char SUPFRAME[SUPFRAME_SIZE] = {0};
-        printf("entering while to read\n");
+        unsigned char SUPFRAME;
+        
+        //printf("entering while to read\n");
         while(status == NONE){
-            printf("entered while to read\n");
-            bytes = read(fd, SUPFRAME, 1);
-            printf("after read statement\n");
-            printf("0x%02X\n",buf);
-            printf("0x%02X\n",bytes);
+            //printf("entered while to read\n");
+            bytes = read(fd, &SUPFRAME, 1);
+            //printf("after read statement\n");
 
             if(bytes == 0) continue;
             
@@ -426,65 +428,66 @@ int llwrite(int fd,const unsigned char *buf, int bufSize)
             while (state < 6 && alarmTriggered == FALSE){
                 switch (state){
                         case 0 :{
-                            if(SUPFRAME[0]!=FLAG){
+                            if(SUPFRAME!=FLAG){
                                 state=0;
                                 break;
                             }
-                            printf("0x%02X\n",SUPFRAME[0]);
+                            printf("0x%02X\n",SUPFRAME);
                             state = 1;
                         }
                         case 1: {
-                            if(SUPFRAME[0]!=A_SET){
+                            if(SUPFRAME!=A_SET){
                                 state=0;
                                 break;
                             }
-                            else if(SUPFRAME[0]==FLAG){
+                            else if(SUPFRAME==FLAG){
                                 state=1;
                                 break;
                             }
-                            printf("0x%02X\n",SUPFRAME[0]);
+                            printf("0x%02X\n",SUPFRAME);
                             state = 2;
-                            a_set = SUPFRAME[0];
+                            a_set = SUPFRAME;
                         }
                         case 2: {
-                            if(SUPFRAME[0]==C_RR0 || SUPFRAME[0]==C_RR1 || SUPFRAME[0]==C_REJ0 || SUPFRAME[0]==C_REJ1 || SUPFRAME[0]==C_DISC){
+                            if(SUPFRAME==C_RR0 || SUPFRAME==C_RR1 || SUPFRAME==C_REJ0 || SUPFRAME==C_REJ1 || SUPFRAME==C_DISC){
                                 state = 3;
-                                c_set = SUPFRAME[0];
+                                c_set = SUPFRAME;
                                 break;
                             }
-                            else if(SUPFRAME[0]==FLAG){
+                            else if(SUPFRAME==FLAG){
                                 state=1;
                                 break;
                             }
                             else{
                                 state = 0;
                             }
-                            printf("0x%02X\n",SUPFRAME[0]);
+                            printf("0x%02X\n",SUPFRAME);
                         }   
                         case 3: {
-                            if(SUPFRAME[0]!=(a_set^c_set)){
+                            if(SUPFRAME!=(a_set^c_set)){
                                 state=0;
                                 break;
                             }
-                            else if(SUPFRAME[0]==FLAG){
+                            else if(SUPFRAME==FLAG){
                                 state=1;
                                 break;
                             }
-                            printf("0x%02X\n",SUPFRAME[0]);
+                            printf("0x%02X\n",SUPFRAME);
                             state = 4;
                         }   
                         case 4:{
-                            if(SUPFRAME[0]!=FLAG){
+                            if(SUPFRAME!=FLAG){
                                 state=0;
                                 break;
                             }
-                            printf("0x%02X\n",SUPFRAME[0]);
+                            printf("0x%02X\n",SUPFRAME);
                             state = 5;
                         }
                         case 5:{
-
+                            state = 6;
                             break;
-                        }        
+                        }    
+
                 }
             }
         }
@@ -530,7 +533,7 @@ int llwrite(int fd,const unsigned char *buf, int bufSize)
 // LLREAD
 ////////////////////////////////////////////////
 int llread(int fd, unsigned char *packet){
-    unsigned char buf;
+    unsigned char buf = 0;
     int state=0;
     int i = 0;
     int bufSize = 0;
@@ -538,97 +541,110 @@ int llread(int fd, unsigned char *packet){
     int c_set = 0;
     int acum=0;
     int bcc2=0;
-    int bytes;
 
     printf("starting to llread\n");
 
-
-
-    while(state>=0){
+    while(state>=0 && state<5){
         printf("entering while\n");
-        bytes = read(fd, &buf, 1);
-        printf("after read statement\n");
-        printf("0x%02X\n",buf);
-        printf("0x%02X\n",bytes);
-
+        int bytes = read(fd, &buf, 1);
+        printf("buf = 0x%02X\n",buf);
         if (bytes == 0){
             continue;
         }
-        
-        //if(bytes > 0) {
-        //    bufSize++;
-        //    printf("0x%02X\n",bufSize);
-        //}
+        else if(bytes > 0) {
+	        bufSize++;
+        }
+
         switch(state){
             case 0:{
                 if(buf!=FLAG){
                     state=0;
+                    printf("buf = 0x%02X\n",buf);
+                    printf("nao e a flag\n");
                     break;
                 }
                 printf("0x%02X\n",buf);
                 state = 1;
+                break;
             }
             case 1:{
                 if(buf!=A_SET){
                     state=0;
+                    printf("buf = 0x%02X\n",buf);
+
                     break;
                 }
                 else if(buf==FLAG){
                     state=1;
+                    printf("buf = 0x%02X\n",buf);
+
                     break;
                 }
                 printf("0x%02X\n",buf);
                 state = 2;
                 a_set = buf;
+                break;
             }
             case 2:{
                 if(buf==C_N(0) || buf==C_N(1)){
                     state=3;
+                    printf("buf = 0x%02X\n",buf);
                     break;
                 }
                 else if(buf==FLAG){
                     state=1;
+                    printf("buf = 0x%02X\n",buf);
                     break;
                 }
                 else if(buf==C_DISC){
                     unsigned char FRAME[5] = {FLAG, A_SET, C_DISC, A_SET^C_DISC, FLAG};
                     return write(fd, FRAME, 5);
+                    printf("buf = 0x%02X\n",buf);
                     return 0;
                 }
                 else{
                     state=0;
+                    printf("buf = 0x%02X\n",buf);
                     break;
                 }
                 printf("0x%02X\n",buf);
+                break;
             }
             case 3:{
                 if(buf!=(a_set^c_set)){
                     state=4; 
+                    printf("buf = 0x%02X\n",buf);
                     break;
                 }
                 else if(buf==FLAG){
                     state=1;
+                    printf("buf = 0x%02X\n",buf);
                     break;
                 }
                 printf("0x%02X\n",buf);
                 state = 4;
+                break;
             }
             case 4:{
                 if(buf==ESC){
                     if(i == bufSize){
+                        printf("buf = 0x%02X\n",buf);
                         return -1;
                     }
                     if(read(fd, &buf, 1) > 0) { // read the next character into buf
                         if(buf == 0x5e){
                             packet[bufSize++] = FLAG;
+                            printf("buf = 0x%02X\n",buf);
                         }
                         else if(buf == 0x5d){
                             packet[bufSize++] = ESC;
+                            printf("buf = 0x%02X\n",buf);
                         }
                         else{
                             return -1;
                         }
                     break;
+                    }
                 }
                 if(buf==FLAG){
                     bcc2 = packet[i-1];
@@ -647,7 +663,7 @@ int llread(int fd, unsigned char *packet){
                         return i;
                     }
                     else{
-                        unsigned char FRAME[SUPFRAME_SIZE] = {FLAG, A_UA, C_REJ(frameRx), A_UA^C_N(frameRx), FLAG};
+                        unsigned char FRAME[SUPFRAME_SIZE] = {FLAG, A_UA, C_REJ(frameRx), A_UA^C_REJ(frameRx), FLAG};
                         bytes = write(fd, FRAME, SUPFRAME_SIZE);
                         return -1;
                     }
@@ -656,12 +672,13 @@ int llread(int fd, unsigned char *packet){
                     packet[i] = buf;
                     i++;
                 }
+
                 printf("0x%02X\n",buf);
                 break;
             }
         }
     }
-    }
+    
 
     return -1;
 }
