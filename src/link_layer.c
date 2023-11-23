@@ -41,23 +41,22 @@ int llopen(LinkLayer connectionParameters)
 
 int llopenTx(int fd){
     //printf("entrou llopentx\n");
+    (void) signal(SIGALRM, alarmHandler); // set the alarm to keep track of retransmissions and timeouts
 
     unsigned char SUPFRAME[SUPFRAME_SIZE] = {FLAG, A_SET, C_SET, A_SET^C_SET, FLAG};
 
-
-    (void) signal(SIGALRM, alarmHandler); // set the alarm to keep track of retransmissions and timeouts
     
     int state = 0;
     unsigned char  byte = 0;
     int a_ua_check = 0; //to store the a_ua and check the bcc1
     int c_ua_check = 0; //to store the c_ua and check the bcc1
 
-    while(retransmitions != 0 && state != -1 ){ 
+    while(retransmitions > 0 && state != -1 ){ 
         int bytes = write(fd, SUPFRAME, SUPFRAME_SIZE);
         printf("%d bytes written\n", bytes);
         alarm(timeout);
         alarmTriggered = FALSE;
-        state = 0;
+        
         while(alarmTriggered==FALSE && state != -1){
             //bytes = read(fd, &byte, 1);  //read the frame sent by receiver
             /*printf("0x%02X\n", byte[0]);
@@ -72,85 +71,83 @@ int llopenTx(int fd){
             if (read(fd, &byte, 1) > 0 ){
                 printf("current 0x%02X, state = %d\n",byte, state);
                 
-            
-            
-            
-            switch (state){
+                switch (state){
 
-                case 0 :{
-                    if(byte!=FLAG){
-                        state=0;
-                        printf("nao e a flag tx\n");
+                    case 0 :{
+                        if(byte!=FLAG){
+                            state=0;
+                            printf("nao e a flag tx\n");
+                            break;
+                        }
+                        
+                        state = 1;
                         break;
                     }
-                    
-                    state = 1;
-                    break;
-                }
-                case 1: {
-                    if(byte!=A_UA){
-                        state=0;
+                    case 1: {
+                        if(byte!=A_UA){
+                            state=0;
+                            printf("0x%02X\n",byte);
+                            break;
+                        }
+                        else if(byte==FLAG){
+                            state=1;
+                            break;
+                        }
                         printf("0x%02X\n",byte);
+                        state=2;
+                        a_ua_check = byte;
+                        //printf("a_ua_check = 0x%02X\n",a_ua_check);
                         break;
                     }
-                    else if(byte==FLAG){
-                        state=1;
+                    case 2: {
+                        if(byte!=C_UA){
+                            state = 0;
+                            break;
+                        }
+                        else if(byte==FLAG){
+                            state=1;
+                            break;
+                        }
+                        printf("0x%02X\n",byte);
+                        state=3;
+                        c_ua_check = byte;
+                        //printf("c_ua_check = 0x%02X\n",c_ua_check);
+                        break;
+                    }   
+                    case 3: {
+                        if(byte!=(a_ua_check^c_ua_check)){
+                            state=0;
+                            break;
+                        }
+                        else if(byte==FLAG){
+                            state=1;
+                            break;
+                        }
+                        printf("0x%02X\n",byte);
+                        state = 4;
+                        break;
+                    }   
+                    case 4:{
+                        if(byte!=FLAG){
+                            state=0;
+                            break;
+                        }
+                        printf("0x%02X\n",byte);
+                        state = 5;
                         break;
                     }
-                    printf("0x%02X\n",byte);
-                    state=2;
-                    a_ua_check = byte;
-                    //printf("a_ua_check = 0x%02X\n",a_ua_check);
-                    break;
+                    case 5:{
+                        state = -1;
+                        printf("0x%02X\n",byte);
+                        return fd;
+                        break;
+                    }
+                    default:{
+                        state = -1;
+                        break;
+                    }
                 }
-                case 2: {
-                    if(byte!=C_UA){
-                        state = 0;
-                        break;
-                    }
-                    else if(byte==FLAG){
-                        state=1;
-                        break;
-                    }
-                    printf("0x%02X\n",byte);
-                    state=3;
-                    c_ua_check = byte;
-                    //printf("c_ua_check = 0x%02X\n",c_ua_check);
-                    break;
-                }   
-                case 3: {
-                    if(byte!=(a_ua_check^c_ua_check)){
-                        state=0;
-                        break;
-                    }
-                    else if(byte==FLAG){
-                        state=1;
-                        break;
-                    }
-                    printf("0x%02X\n",byte);
-                    state = 4;
-                    break;
-                }   
-                case 4:{
-                    if(byte!=FLAG){
-                        state=0;
-                        break;
-                    }
-                    printf("0x%02X\n",byte);
-                    state = 5;
-                    break;
-                }
-                case 5:{
-                    state = -1;
-                    printf("0x%02X\n",byte);
-                      return fd;
-                    break;
-                }
-                default:{
-                    state = -1;
-                    break;
-                }
-            }}
+            }
         }
       
         retransmitions--;
