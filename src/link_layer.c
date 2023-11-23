@@ -57,19 +57,24 @@ int llopenTx(int fd){
         printf("%d bytes written\n", bytes);
         alarm(timeout);
         alarmTriggered = FALSE;
-
+        state = 0;
         while(alarmTriggered==FALSE && state != -1){
-            bytes = read(fd, &byte, 1);  //read the frame sent by receiver
+            //bytes = read(fd, &byte, 1);  //read the frame sent by receiver
             /*printf("0x%02X\n", byte[0]);
             printf("0x%02X\n", byte[1]);
             printf("0x%02X\n", byte[2]);
             printf("0x%02X\n", byte[3]);
             printf("0x%02X\n", byte[4]);*/
-
-            if(bytes == 0){
+            
+            /*if(bytes == 0){
                 continue;
-            }            
-
+            }  */          
+            if (read(fd, &byte, 1) > 0 ){
+                printf("current 0x%02X, state = %d\n",byte, state);
+                
+            
+            
+            
             switch (state){
 
                 case 0 :{
@@ -78,7 +83,7 @@ int llopenTx(int fd){
                         printf("nao e a flag tx\n");
                         break;
                     }
-                    printf("0x%02X\n",byte);
+                    
                     state = 1;
                     break;
                 }
@@ -138,14 +143,16 @@ int llopenTx(int fd){
                 case 5:{
                     state = -1;
                     printf("0x%02X\n",byte);
+                      return fd;
                     break;
                 }
                 default:{
                     state = -1;
                     break;
                 }
-            }
+            }}
         }
+      
         retransmitions--;
     }
     return fd;
@@ -379,22 +386,23 @@ int llwrite(int fd,const unsigned char *buf, int bufSize)
 
     int j = 0;
     printf("starting to fill infoframe header\n");
+
     //header
     for(int i=0; i<4; i++,j++){
         infoframe[j] = header[i];
-        printf("0x%02X\n",infoframe[j]);
+        printf("0x%02X ",infoframe[j]);
     }
-    printf("starting to fill infoframe data\n");
+    printf("\nstarting to fill infoframe data with size %d\n", currentSize);
     //data
     for(int k=0; k<currentSize; k++,j++){
         infoframe[j] = dataBuf[k];
-        printf("0x%02X\n",infoframe[j]);
+        printf("0x%02X ,",infoframe[j]);
     }
-    printf("starting to fill infoframe trailer\n");
+    printf("\nstarting to fill infoframe trailer\n");
     //trailer
     for(int l=0; l<trailerSize; l++,j++){
         infoframe[j] = trailer[l];
-        printf("0x%02X\n",infoframe[j]);
+        printf("0x%02X ",infoframe[j]);
     }
 
     FrameStatus status = NONE;
@@ -408,6 +416,9 @@ int llwrite(int fd,const unsigned char *buf, int bufSize)
         alarmTriggered = FALSE;
         
         int bytes = write(fd, infoframe, infoframeSize); //nao sei se aqui e infoframeSize, vi outro que tem J 
+        for (int i = 0; i < infoframeSize; i++){
+             printf("0x%02X ",infoframe[i]);
+        }
         printf("%d bytes written\n", infoframeSize);
         int state=0; //1-FLAG_RCV, 2-A_RCV, 3-C_RCV, 4-BCC_OK, 5-STOP
 
@@ -415,7 +426,7 @@ int llwrite(int fd,const unsigned char *buf, int bufSize)
         int c_set = 0;
 
         unsigned char SUPFRAME;
-        
+        status = NONE;
         //printf("entering while to read\n");
         while(status == NONE){
             //printf("entered while to read\n");
@@ -543,17 +554,18 @@ int llread(int fd, unsigned char *packet){
     int bcc2=0;
 
     printf("starting to llread\n");
-
+    /*
     while(state>=0 && state<5){
         printf("entering while\n");
         int bytes = read(fd, &buf, 1);
         printf("buf = 0x%02X\n",buf);
+       
         if (bytes == 0){
             continue;
         }
         else if(bytes > 0) {
 	        bufSize++;
-        }
+        
 
         switch(state){
             case 0:{
@@ -561,6 +573,7 @@ int llread(int fd, unsigned char *packet){
                     state=0;
                     printf("buf = 0x%02X\n",buf);
                     printf("nao e a flag\n");
+                    state = 1;
                     break;
                 }
                 printf("0x%02X\n",buf);
@@ -568,15 +581,15 @@ int llread(int fd, unsigned char *packet){
                 break;
             }
             case 1:{
+                  printf("buf = 0x%02X\n",buf);
+                
                 if(buf!=A_SET){
                     state=0;
-                    printf("buf = 0x%02X\n",buf);
-
+                  
                     break;
                 }
                 else if(buf==FLAG){
                     state=1;
-                    printf("buf = 0x%02X\n",buf);
 
                     break;
                 }
@@ -586,6 +599,7 @@ int llread(int fd, unsigned char *packet){
                 break;
             }
             case 2:{
+                
                 if(buf==C_N(0) || buf==C_N(1)){
                     state=3;
                     printf("buf = 0x%02X\n",buf);
@@ -677,6 +691,12 @@ int llread(int fd, unsigned char *packet){
                 break;
             }
         }
+    }
+    }*/
+
+    for (int i = 0; i < 21; i ++){
+        int bytes = read(fd, &buf, 1);
+        printf("buf = 0x%02X , ",buf);
     }
     
 

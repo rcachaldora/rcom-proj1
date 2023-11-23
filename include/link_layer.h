@@ -37,7 +37,7 @@ typedef enum
     NONE,
 } FrameStatus;
 
-#define BAUDRATE 38400
+#define BAUDRATE B38400
 
 // SIZE of maximum acceptable payload.
 // Maximum number of bytes that application layer should send to link layer

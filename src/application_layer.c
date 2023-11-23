@@ -19,8 +19,9 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     
 
     if (ll.role == LlTx) {
+        tcflush(fd, TCIOFLUSH);
         // Create some data to write
-        const unsigned char *dataToWrite = "Hello, world}";
+        const unsigned char *dataToWrite = "}Hello, world";
         int dataSize = strlen(dataToWrite) + 1; // +1 for the null terminator
 
         // Call llwrite and print the result
@@ -30,6 +31,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     } else if (ll.role == LlRx) {
         // Create a buffer to read data into
         unsigned char readBuffer[1024];
+        tcflush(fd, TCIOFLUSH);
 
         // Call llread and print the result
         int readResult = llread(fd, readBuffer);
