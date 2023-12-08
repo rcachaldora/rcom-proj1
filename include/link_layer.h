@@ -37,8 +37,6 @@ typedef enum
     NONE,
 } FrameStatus;
 
-#define BAUDRATE B38400
-
 // SIZE of maximum acceptable payload.
 // Maximum number of bytes that application layer should send to link layer
 #define MAX_PAYLOAD_SIZE 1000
@@ -70,7 +68,7 @@ int llopen(LinkLayer connectionParameters);
 int llopenTx(int fd);
 int llopenRx(int fd);
 
-int openPort(const char* serialPort);
+int openPort(const char* serialPort, const int BAUDRATE);
 
 void alarmHandler(int signal);
 

@@ -9,7 +9,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 {
     LinkLayer ll;
     strcpy(ll.serialPort,serialPort);
-    ll.role = strcmp(role, "tx") == 0 ? LlTx : LlRx;
+    ll.role = (strcmp(role, "tx") == 0) ? LlTx : LlRx;
     ll.baudRate = baudRate;
     ll.nRetransmissions = nTries;
     ll.timeout = timeout;
@@ -17,7 +17,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
     int fd = llopen(ll);
     
-
+    
     if (ll.role == LlTx) {
         tcflush(fd, TCIOFLUSH);
         // Create some data to write
@@ -42,4 +42,5 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             printf("Read data: %s\n", readBuffer);
         }
     }
+    
 }

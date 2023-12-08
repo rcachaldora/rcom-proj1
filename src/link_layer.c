@@ -5,7 +5,7 @@
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
 
-int alarmTriggered = FALSE;
+int alarmEnabled = FALSE;
 int retransmitions = 0;
 int alarmCount = 0;
 int timeout = 0;
@@ -19,7 +19,7 @@ LinkLayerRole ROLE;
 ////////////////////////////////////////////////
 int llopen(LinkLayer connectionParameters)
 {
-    int fd = openPort(connectionParameters.serialPort);
+    int fd = openPort(connectionParameters.serialPort, connectionParameters.baudRate);
     if(fd < 0) return -1;
     
     timeout = connectionParameters.timeout;
@@ -47,17 +47,18 @@ int llopenTx(int fd){
 
     
     int state = 0;
-    unsigned char  byte = 0;
     int a_ua_check = 0; //to store the a_ua and check the bcc1
     int c_ua_check = 0; //to store the c_ua and check the bcc1
 
-    while(retransmitions > 0 && state != -1 ){ 
+    while(alarmCount < retransmitions && state != -1 ){ 
         int bytes = write(fd, SUPFRAME, SUPFRAME_SIZE);
         printf("%d bytes written\n", bytes);
+
         alarm(timeout);
-        alarmTriggered = FALSE;
-        
-        while(alarmTriggered==FALSE && state != -1){
+        alarmEnabled = TRUE;
+
+        unsigned char byte;
+        while(alarmEnabled && state != -1){
             //bytes = read(fd, &byte, 1);  //read the frame sent by receiver
             /*printf("0x%02X\n", byte[0]);
             printf("0x%02X\n", byte[1]);
@@ -139,7 +140,6 @@ int llopenTx(int fd){
                     case 5:{
                         state = -1;
                         printf("0x%02X\n",byte);
-                        return fd;
                         break;
                     }
                     default:{
@@ -149,8 +149,6 @@ int llopenTx(int fd){
                 }
             }
         }
-      
-        retransmitions--;
     }
     return fd;
 }
@@ -159,7 +157,7 @@ int llopenRx(int fd){
     //printf("entrou llopenrx\n");
 
 
-    unsigned char SUPFRAME[SUPFRAME_SIZE] = {0};
+    unsigned char SUPFRAME;
 
 
     int state=0; //1-FLAG_RCV, 2-A_RCV, 3-C_RCV, 4-BCC_OK, 5-STOP
@@ -167,73 +165,73 @@ int llopenRx(int fd){
     int a_set = 0;
     int c_set = 0;
 
-    while(retransmitions > 0 && state != -1 ){ 
+    while(state != -1 ){ 
 
-        int bytes = read(fd, &SUPFRAME, 1);
-        if(bytes == 0) continue;
-        switch (state){
-            
+        if(read(fd, &SUPFRAME, 1) > 0) {
+        
+            switch (state){
+                
                 case 0 :{
-                    if(SUPFRAME[0]!=FLAG){
+                    if(SUPFRAME!=FLAG){
                         state=0;
-                        printf("0x%02X\n",SUPFRAME[0]);
+                        printf("0x%02X\n",SUPFRAME);
                         printf("nao e a flag rx\n");
                         state = -1; //tirar depois
                         break;
                     }
-                    printf("0x%02X\n",SUPFRAME[0]);
+                    printf("0x%02X\n",SUPFRAME);
                     state = 1;
                     break;
                 }
                 case 1: {
-                    if(SUPFRAME[0]!=A_SET){
+                    if(SUPFRAME!=A_SET){
                         state=0;
-                        printf("0x%02X\n",SUPFRAME[0]);
+                        printf("0x%02X\n",SUPFRAME);
                         break;
                     }
-                    else if(SUPFRAME[0]==FLAG){
+                    else if(SUPFRAME==FLAG){
                         state=1;
-                        printf("0x%02X\n",SUPFRAME[0]);
+                        printf("0x%02X\n",SUPFRAME);
                         break;
                     }
-                    printf("0x%02X\n",SUPFRAME[0]);
+                    printf("0x%02X\n",SUPFRAME);
                     state = 2;
-                    a_set = SUPFRAME[0];
+                    a_set = SUPFRAME;
                     break;
                 }
                 case 2: {
-                    if(SUPFRAME[0]!=C_SET){
+                    if(SUPFRAME!=C_SET){
                         state = 0;
                         break;
                     }
-                    else if(SUPFRAME[0]==FLAG){
+                    else if(SUPFRAME==FLAG){
                         state=1;
                         break;
                     }
-                    printf("0x%02X\n",SUPFRAME[0]);
+                    printf("0x%02X\n",SUPFRAME);
                     state = 3;
-                    c_set = SUPFRAME[0];
+                    c_set = SUPFRAME;
                     break;
                 }   
                 case 3: {
-                    if(SUPFRAME[0]!=(a_set^c_set)){
+                    if(SUPFRAME!=(a_set^c_set)){
                         state=0;
                         break;
                     }
-                    else if(SUPFRAME[0]==FLAG){
+                    else if(SUPFRAME==FLAG){
                         state=1;
                         break;
                     }
-                    printf("0x%02X\n",SUPFRAME[0]);
+                    printf("0x%02X\n",SUPFRAME);
                     state = 4;
                     break;
                 }   
                 case 4:{
-                    if(SUPFRAME[0]!=FLAG){
+                    if(SUPFRAME!=FLAG){
                         state=0;
                         break;
                     }
-                    printf("0x%02X\n",SUPFRAME[0]);
+                    printf("0x%02X\n",SUPFRAME);
                     state = 5;
                     break;
                 }
@@ -241,7 +239,7 @@ int llopenRx(int fd){
                     state = -1;
                     break;
                 }        
-
+            }
         }
     }
 
@@ -262,7 +260,7 @@ int llopenRx(int fd){
 }
 
 
-int openPort(const char* serialPort){
+int openPort(const char* serialPort, const int BAUDRATE){
     // Open serial port device for reading and writing, and not as controlling tty
     // because we don't want to get killed if linenoise sends CTRL-C.
     int fd = open(serialPort, O_RDWR | O_NOCTTY);
@@ -317,7 +315,7 @@ int openPort(const char* serialPort){
 }
 
 void alarmHandler(int signal) {
-    alarmTriggered = TRUE;
+    alarmEnabled = FALSE;
     alarmCount++;
 }
 
@@ -403,21 +401,24 @@ int llwrite(int fd,const unsigned char *buf, int bufSize)
     }
 
     FrameStatus status = NONE;
+    int state=0; //1-FLAG_RCV, 2-A_RCV, 3-C_RCV, 4-BCC_OK, 5-STOP
+    alarmCount = 0;
 
     printf("starting to write\n");
     printf("ret = %d\n",retransmitions);
-    for(int retransmitionsCount = retransmitions; retransmitionsCount>0; retransmitionsCount--){
+    while(alarmCount < retransmitions && state != -1 ){
         printf("entering the loop\n");
-        printf("retransmitionsCount = %d\n",retransmitionsCount);
         alarm(timeout);
-        alarmTriggered = FALSE;
+        alarmEnabled = TRUE;
         
         int bytes = write(fd, infoframe, infoframeSize); //nao sei se aqui e infoframeSize, vi outro que tem J 
+        /*
         for (int i = 0; i < infoframeSize; i++){
              printf("0x%02X ",infoframe[i]);
+        
         }
+        */
         printf("%d bytes written\n", infoframeSize);
-        int state=0; //1-FLAG_RCV, 2-A_RCV, 3-C_RCV, 4-BCC_OK, 5-STOP
 
         int a_set = 0;
         int c_set = 0;
@@ -433,7 +434,7 @@ int llwrite(int fd,const unsigned char *buf, int bufSize)
             if(bytes == 0) continue;
             
             printf("starting to read\n");
-            while (state < 6 && alarmTriggered == FALSE){
+            while (state < 6 && alarmEnabled == FALSE){
                 switch (state){
                         case 0 :{
                             if(SUPFRAME!=FLAG){
@@ -492,7 +493,7 @@ int llwrite(int fd,const unsigned char *buf, int bufSize)
                             state = 5;
                         }
                         case 5:{
-                            state = 6;
+                            state = -1;
                             break;
                         }    
 
@@ -551,151 +552,146 @@ int llread(int fd, unsigned char *packet){
     int bcc2=0;
 
     printf("starting to llread\n");
-    /*
+    
     while(state>=0 && state<5){
         printf("entering while\n");
-        int bytes = read(fd, &buf, 1);
-        printf("buf = 0x%02X\n",buf);
-       
-        if (bytes == 0){
-            continue;
-        }
-        else if(bytes > 0) {
-	        bufSize++;
-        
-
-        switch(state){
-            case 0:{
-                if(buf!=FLAG){
-                    state=0;
-                    printf("buf = 0x%02X\n",buf);
-                    printf("nao e a flag\n");
+        while(read(fd, &buf, 1) == 0) {continue;}
+        if(read(fd, &buf, 1) > 0){
+            printf("buf = 0x%02X\n",buf);
+            bufSize++;
+            switch(state){
+                case 0:{
+                    if(buf!=FLAG){
+                        state=0;
+                        printf("buf = 0x%02X\n",buf);
+                        printf("nao e a flag\n");
+                        state = 1;
+                        break;
+                    }
+                    printf("0x%02X\n",buf);
                     state = 1;
                     break;
                 }
-                printf("0x%02X\n",buf);
-                state = 1;
-                break;
-            }
-            case 1:{
-                  printf("buf = 0x%02X\n",buf);
-                
-                if(buf!=A_SET){
-                    state=0;
-                  
-                    break;
-                }
-                else if(buf==FLAG){
-                    state=1;
-
-                    break;
-                }
-                printf("0x%02X\n",buf);
-                state = 2;
-                a_set = buf;
-                break;
-            }
-            case 2:{
-                
-                if(buf==C_N(0) || buf==C_N(1)){
-                    state=3;
+                case 1:{
                     printf("buf = 0x%02X\n",buf);
-                    break;
-                }
-                else if(buf==FLAG){
-                    state=1;
-                    printf("buf = 0x%02X\n",buf);
-                    break;
-                }
-                else if(buf==C_DISC){
-                    unsigned char FRAME[5] = {FLAG, A_SET, C_DISC, A_SET^C_DISC, FLAG};
-                    return write(fd, FRAME, 5);
-                    printf("buf = 0x%02X\n",buf);
-                    return 0;
-                }
-                else{
-                    state=0;
-                    printf("buf = 0x%02X\n",buf);
-                    break;
-                }
-                printf("0x%02X\n",buf);
-                break;
-            }
-            case 3:{
-                if(buf!=(a_set^c_set)){
-                    state=4; 
-                    printf("buf = 0x%02X\n",buf);
-                    break;
-                }
-                else if(buf==FLAG){
-                    state=1;
-                    printf("buf = 0x%02X\n",buf);
-                    break;
-                }
-                printf("0x%02X\n",buf);
-                state = 4;
-                break;
-            }
-            case 4:{
-                if(buf==ESC){
-                    if(i == bufSize){
-                        printf("buf = 0x%02X\n",buf);
-                        return -1;
-                    }
-                    if(read(fd, &buf, 1) > 0) { // read the next character into buf
-                        if(buf == 0x5e){
-                            packet[bufSize++] = FLAG;
-                            printf("buf = 0x%02X\n",buf);
-                        }
-                        else if(buf == 0x5d){
-                            packet[bufSize++] = ESC;
-                            printf("buf = 0x%02X\n",buf);
-                        }
-                        else{
-                            return -1;
-                        }
-                    break;
-                    }
-                }
-                if(buf==FLAG){
-                    bcc2 = packet[i-1];
-                    i--;
-                    packet[i] = '\0';
                     
-                    for (int j = 0; j<i;j++){
-                        acum ^= packet[j];
+                    if(buf!=A_SET){
+                        state=0;
+                    
+                        break;
                     }
+                    else if(buf==FLAG){
+                        state=1;
 
-                    if(bcc2 == acum){
-                        state = 5;
-                        unsigned char FRAME[SUPFRAME_SIZE] = {FLAG, A_UA, C_N(frameRx), A_UA^C_N(frameRx), FLAG};
-                        bytes = write(fd, FRAME, SUPFRAME_SIZE);
-                        frameRx=(frameRx+1)%2;
-                        return i;
+                        break;
+                    }
+                    printf("0x%02X\n",buf);
+                    state = 2;
+                    a_set = buf;
+                    break;
+                }
+                case 2:{
+                    
+                    if(buf==C_N(0) || buf==C_N(1)){
+                        state=3;
+                        printf("buf = 0x%02X\n",buf);
+                        break;
+                    }
+                    else if(buf==FLAG){
+                        state=1;
+                        printf("buf = 0x%02X\n",buf);
+                        break;
+                    }
+                    else if(buf==C_DISC){
+                        unsigned char FRAME[5] = {FLAG, A_SET, C_DISC, A_SET^C_DISC, FLAG};
+                        return write(fd, FRAME, 5);
+                        printf("buf = 0x%02X\n",buf);
+                        return 0;
                     }
                     else{
-                        unsigned char FRAME[SUPFRAME_SIZE] = {FLAG, A_UA, C_REJ(frameRx), A_UA^C_REJ(frameRx), FLAG};
-                        bytes = write(fd, FRAME, SUPFRAME_SIZE);
-                        return -1;
+                        state=0;
+                        printf("buf = 0x%02X\n",buf);
+                        break;
                     }
+                    printf("0x%02X\n",buf);
+                    break;
                 }
-                else{
-                    packet[i] = buf;
-                    i++;
+                case 3:{
+                    if(buf!=(a_set^c_set)){
+                        state=4; 
+                        printf("buf = 0x%02X\n",buf);
+                        break;
+                    }
+                    else if(buf==FLAG){
+                        state=1;
+                        printf("buf = 0x%02X\n",buf);
+                        break;
+                    }
+                    printf("0x%02X\n",buf);
+                    state = 4;
+                    break;
                 }
+                case 4:{
+                    if(buf==ESC){
+                        if(i == bufSize){
+                            printf("buf = 0x%02X\n",buf);
+                            return -1;
+                        }
+                        if(read(fd, &buf, 1) > 0) { // read the next character into buf
+                            if(buf == 0x5e){
+                                packet[bufSize++] = FLAG;
+                                printf("buf = 0x%02X\n",buf);
+                            }
+                            else if(buf == 0x5d){
+                                packet[bufSize++] = ESC;
+                                printf("buf = 0x%02X\n",buf);
+                            }
+                            else{
+                                return -1;
+                            }
+                        break;
+                        }
+                    }
+                    if(buf==FLAG){
+                        bcc2 = packet[i-1];
+                        i--;
+                        packet[i] = '\0';
+                        
+                        for (int j = 0; j<i;j++){
+                            acum ^= packet[j];
+                        }
 
-                printf("0x%02X\n",buf);
-                break;
+                        if(bcc2 == acum){
+                            state = 5;
+                            unsigned char FRAME[SUPFRAME_SIZE] = {FLAG, A_UA, C_N(frameRx), A_UA^C_N(frameRx), FLAG};
+                            int bytes = write(fd, FRAME, SUPFRAME_SIZE);
+                            frameRx=(frameRx+1)%2;
+                            return i;
+                        }
+                        else{
+                            unsigned char FRAME[SUPFRAME_SIZE] = {FLAG, A_UA, C_REJ(frameRx), A_UA^C_REJ(frameRx), FLAG};
+                            int bytes = write(fd, FRAME, SUPFRAME_SIZE);
+                            return -1;
+                        }
+                    }
+                    else{
+                        packet[i] = buf;
+                        i++;
+                    }
+
+                    printf("0x%02X\n",buf);
+                    break;
+                }
             }
         }
     }
-    }*/
 
+    /*
     for (int i = 0; i < 21; i ++){
         int bytes = read(fd, &buf, 1);
         printf("buf = 0x%02X , ",buf);
     }
-    
+    */
 
     return -1;
 }
@@ -725,7 +721,7 @@ int llcloseTx(int fd)
 
     (void) signal(SIGALRM, alarmHandler); // set the alarm to keep track of retransmissions and timeouts
     alarm(timeout);
-    alarmTriggered = FALSE;
+    alarmEnabled = FALSE;
     int state;
 
     while(retransmitions > 0 && state != -1 ){ 
