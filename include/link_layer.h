@@ -53,6 +53,8 @@ typedef enum
 #define A_UA    0x01
 #define C_UA    0x07
 #define C_N(n)  (n << 6) // 00000000 || 01000000
+#define C_RR(Nr) ((Nr << 7) | 0x05)
+#define C_REJ(Nr) ((Nr << 7) | 0x01)
 #define C_RR0   0X05
 #define C_RR1   0X85
 #define C_REJ0  0X01
